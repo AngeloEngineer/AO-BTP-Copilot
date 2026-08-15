@@ -1,0 +1,26 @@
+# Environnements virtuels
+.venv/
+venv/
+env/
+ENV/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Données générées
+data/processed/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs et secrets
+*.log
+.env
+.env.*

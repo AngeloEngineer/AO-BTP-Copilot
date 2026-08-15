@@ -1,0 +1,58 @@
+<!--
+Fixture de test LOCAL — reconstitution approximative.
+
+Les données ci-dessous (références, titres, entités, dates) sont réelles, capturées le
+15/08/2026 sur marches-publics-togo.com/consultations via un outil de fetch web qui ne
+préserve pas les balises HTML brutes (conversion en markdown). Le squelette <table> ci-
+dessous est donc une reconstruction plausible (le site expose bien une vraie table
+sémantique, confirmée par la conversion markdown propre obtenue), PAS un dump exact du
+DOM réel.
+
+Objectif de cette fixture : valider que parse_consultations_table() sait correctement
+extraire référence / titre / lien / entité / type / statut / date limite depuis une
+structure de table classique. Elle ne remplace PAS un test contre le HTML réel — à faire
+en priorité au démarrage du J1, avec ajustement des sélecteurs si nécessaire.
+-->
+<html>
+<body>
+<table>
+  <thead>
+    <tr><th>Référence</th><th>Titre</th><th>Entité</th><th>Type</th><th>Statut</th><th>Date limite</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AO-2026-00009</td>
+      <td><a href="/consultations/aoon-araaaic-boad2026aon010-realisation-de-forages-a-energie-solaire-et-amenagement-de-surface-pour-le-maraichage-avec-irrigation-solaire-et-un-reseau-californien-dans-les-regions-des-savanes-et-de-la-kara-du-togo-nlXSV">AOON ARAA/AIC-BOAD/2026/AON/010 - Réalisation de Forages à énergie solaire et amenagement de surface pour le maraichage avec irrigation solaire et un réseau Californien dans les regions des Savanes et de la Kara du Togo</a></td>
+      <td>—</td>
+      <td>Travaux</td>
+      <td>Publié</td>
+      <td>10/07/2026</td>
+    </tr>
+    <tr>
+      <td>AO-2026-00008</td>
+      <td><a href="/consultations/aooi-n0222026dagdpaboad-fourniture-installation-et-integration-de-commutateurs-dans-le-reseau-informatique-du-siege-de-la-boad-RZZc5">AOOI N°022/2026/DAG/DPA/BOAD - Fourniture, installation et intégration de commutateurs dans le réseau informatique du Siège de la BOAD</a></td>
+      <td>BOAD</td>
+      <td>Services</td>
+      <td>Publié</td>
+      <td>08/07/2026</td>
+    </tr>
+    <tr>
+      <td>AO-2026-00007</td>
+      <td><a href="/consultations/ao-2026-00007-realisation-de-reseaux-dassainissement-et-de-drainage-des-eaux-pluviales-dans-la-ville-de-lome-abc12">Travaux de réalisation de réseaux d'assainissement et de drainage des eaux pluviales dans la ville de Lomé</a></td>
+      <td>Mairie de Lomé</td>
+      <td>—</td>
+      <td>Publié</td>
+      <td>02/06/2026</td>
+    </tr>
+    <tr>
+      <td>AO-2026-00003</td>
+      <td><a href="/consultations/ami-n001meemprmpspmp-recrutement-dun-cabinet-pour-lactualisation-des-etudes-davantprojet-detaille-apd-de-quatre-sites-en-vue-de-la-realisation-de-trois-barrages-et-de-lamenagement-de-420-ha-dans-le-cadre-du-pdissa-OeESc">AMI N°001/MEEM/PRMP/SPMP – Recrutement d'un cabinet pour l'actualisation des études d'Avant-Projet Détaillé (APD) de quatre sites en vue de la réalisation de trois barrages et de l'aménagement de 420 ha dans le cadre du PDISSA</a></td>
+      <td>LE MI</td>
+      <td>Travaux</td>
+      <td>Publié</td>
+      <td>27/05/2026</td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>
