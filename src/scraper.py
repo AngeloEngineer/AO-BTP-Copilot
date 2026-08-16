@@ -50,14 +50,6 @@ class Consultation:
     btp_classification_source: str | None = None  # "site" | "mots-clés" | None
 
 
-def fetch_html(url: str, params: dict | None = None) -> str:
-    """Récupère le HTML d'une page. Lève une exception explicite en cas d'échec
-    plutôt que de renvoyer une chaîne vide silencieusement."""
-    resp = requests.get(url, headers=HEADERS, params=params, timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-    return resp.text
-
-
 def parse_consultations_table(html: str, base_url: str = BASE_URL) -> list[Consultation]:
     """Parse la table sémantique de la page /consultations.
 
@@ -159,6 +151,30 @@ def parse_consultations_cards(html: str, base_url: str = BASE_URL) -> list[Consu
     return results
 
 
+def extract_full_titles(html: str, base_url: str = BASE_URL) -> dict[str, str]:
+    """Récupère les titres COMPLETS des consultations depuis les blocs "card".
+
+    Le site affiche la même liste sous deux vues : une table (données fiables mais
+    titre tronqué avec "...") et des cards <article class="item-card"> dont le titre
+    (<h3 class="item-card__title"><a>) est complet. On construit une mapping
+    href -> titre complet pour enrichir les résultats de la table.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    mapping: dict[str, str] = {}
+    for card in soup.find_all("article", class_="item-card"):
+        heading = card.find(["h2", "h3"], class_="item-card__title") or card.find(["h2", "h3"])
+        if heading is None:
+            continue
+        link = heading.find("a")
+        if not link or not link.has_attr("href"):
+            continue
+        href = urljoin(base_url, link["href"])
+        titre = link.get_text(strip=True)
+        if href and titre:
+            mapping[href] = titre
+    return mapping
+
+
 def scrape_consultations(btp_only: bool = False) -> list[Consultation]:
     """Point d'entrée principal : récupère TOUTES les consultations (pas de filtre
     serveur — voir docstring de classify_btp sur pourquoi le champ type_marche du site
@@ -174,6 +190,17 @@ def scrape_consultations(btp_only: bool = False) -> list[Consultation]:
     if not consultations:
         log.info("Table vide/absente, tentative avec le parsing cards (fallback).")
         consultations = parse_consultations_cards(html)
+    else:
+        # Enrichit les titres tronqués de la table avec les titres complets des cards.
+        full_titles = extract_full_titles(html)
+        n_enrichis = 0
+        for c in consultations:
+            complet = full_titles.get(c.url_detail)
+            if complet:
+                c.titre = complet
+                n_enrichis += 1
+        if n_enrichis:
+            log.info("Titres complets récupérés pour %d consultation(s) via les cards.", n_enrichis)
 
     n_site = sum(1 for c in consultations if c.btp_classification_source == "site")
     n_kw = sum(1 for c in consultations if c.btp_classification_source == "mots-clés")

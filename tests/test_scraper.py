@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from scraper import parse_consultations_table, classify_btp  # noqa: E402
+from scraper import parse_consultations_table, extract_full_titles, classify_btp  # noqa: E402
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "consultations_list.html"
 
@@ -65,6 +65,21 @@ def test_all_btp_via_is_btp_flag():
     assert len(btp) == 3, f"Attendu 3 AO classifiés BTP, obtenu {len(btp)}"
 
 
+def test_extract_full_titles_from_cards():
+    """La table tronque les titres, les cards les donnent en entier — on doit pouvoir
+    construire la mapping href -> titre complet."""
+    html = (
+        '<article class="item-card">'
+        '<h3 class="item-card__title"><a href="/consultations/dao-travaux-xyz">'
+        'DAO Travaux complet et non tronqué - détail</a></h3>'
+        "</article>"
+    )
+    mapping = extract_full_titles(html)
+    assert mapping["https://www.marches-publics-togo.com/consultations/dao-travaux-xyz"] == (
+        "DAO Travaux complet et non tronqué - détail"
+    )
+
+
 if __name__ == "__main__":
     test_parse_consultations_table_extracts_all_rows()
     test_parse_consultations_table_fields()
@@ -72,4 +87,5 @@ if __name__ == "__main__":
     test_classify_btp_catches_mislabeled_tender()
     test_classify_btp_direct_unit_cases()
     test_all_btp_via_is_btp_flag()
+    test_extract_full_titles_from_cards()
     print("Tous les tests locaux passent.")

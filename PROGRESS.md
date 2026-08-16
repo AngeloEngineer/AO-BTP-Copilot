@@ -66,13 +66,19 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - Architecture définie, sources vérifiées par recherche web
 - Planning établi sur 5 jours (16→20/08), granularité journalière, pas de blocs horaires
 
-### 16/08 (J1) — Ingestion + extraction — **EN COURS**
-- [ ] Lancer le scraper en conditions réelles (accès réseau complet, poste de Broly)
-- [ ] Ajuster les sélecteurs si la structure réelle diffère de la fixture
-- [ ] Croiser avec arcop.tg si < 10 AO Travaux récupérés
-- [ ] Parser le détail de chaque AO (page individuelle + PDF si présent)
-- [ ] Extraction champs clés (objet, date limite, montant, lots, pièces requises)
-- [ ] Stockage SQLite (`data/processed/consultations.db`)
+### 16/08 (J1) — Ingestion + extraction — **EN COURS / avancée notable**
+- [x] Scraping réel validé : marches-publics-togo.com → 9 consultations, 3 BTP (2 étiquette site,
+  1 mots-clés), titres complets enrichis via les cards
+- [x] scraper ARCOP appels-doffres (constat documenté : échantillon 100% AMI consultants, 0 BTP)
+- [x] scraper dossiers-types ARCOP (`arcop.tg/dossiers-types/`) : 22 dossiers réels,
+  4 catégories (DP, Travaux, Fournitures/services, autres documents)
+- [x] téléchargement des 22 .docx (≈6,9 Mo) et du corpus légal (Recueil ARCOP 2024, 39 Mo)
+- [x] module extraction.py : texte (docx via python-docx, pdf via PyMuPDF) + champs structurés
+  (objet, montant prévisionnel, garantie, délai, validité offres, date limite, lieu, contact) —
+  les placeholders des dossiers-types sont documentés (is_placeholder) et non perdus
+- [x] stockage SQLite : consultations.db, dossiers_types.db, extraction.db (documents + champs_extraits)
+- [x] tests : 26 passent (pytest), fixtures localisées (consultations, arcop, dossiers-types), sans réseau
+- [ ] valider le parsing des pages de détail individuelles des AO (URL detail) si besoin pour extraction PDF
 - Décisions techniques : voir section ci-dessous
 - Blocages : à documenter en session
 
@@ -97,5 +103,8 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 
 ## Prochaine session
 
-Reprendre au Jour 1 : exécuter `src/scraper.py` en conditions réelles, valider/ajuster les
-sélecteurs, puis passer à l'extraction PDF si le volume d'AO est suffisant.
+Reprendre au Jour 1 — suite ingestion/extraction :
+- valider si nécessaire le parsing des pages de détail des AO (URL detail) et l'extraction
+  des PDF d'AO en cours, puis consolider extraction.db ;
+- enchaîner sur le **Jour 2 (corpus RAG)** : chunking du Recueil ARCOP 2024 par article,
+  embeddings, FAISS local — le texte du corpus est déjà extrait (829 876 caractères).
