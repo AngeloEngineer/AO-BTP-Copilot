@@ -1,0 +1,34 @@
+<!--
+Fixture de test LOCAL — reconstitution approximative.
+
+Les entrées ci-dessous (titres, dates, liens PDF) sont réelles, observées le 15/08/2026
+sur arcop.tg/appels-doffres/ via un outil de fetch web qui convertit en markdown (pas de
+DOM brut). Le squelette HTML <h3> + voisinage textuel est une reconstruction plausible de
+la structure WordPress/Elementor observée, PAS un dump exact du DOM réel.
+
+Constats documentés par cette fixture (voir PROGRESS.md) :
+- les 3 entrées réelles sont toutes des AMI de recrutement de consultants (chef de projet,
+  audit, refonte de site web) — aucune n'est un AO Travaux/BTP ;
+- la plus récente date d'octobre 2023 au moment de l'observation,
+  mais la fixture utilise des dates volontairement franches pour exécuter des
+  assertions déterministes (ex. "25 avril 2025").
+
+Une fois le HTML réel capturé en environnement avec accès réseau (J1), remplacer cette
+reconstitution par un dump exact et ajuster les sélecteurs si besoin.
+-->
+<html>
+<body>
+  <article>
+    <h3><a href="https://arcop.tg/appels-doffres/ami-2025-002-recrutement-dun-chef-de-projet/">AMI N°002/2025/ARCOP/PRMP — Recrutement d'un Chef de Projet pour la supervision des projets de la commande publique</a></h3>
+    <p>Date de publication : 3 mars 2025. Cliquez sur le lien suivant pour lire l'AMI https://arcop.tg/wp-content/uploads/2025/03/AMI-CHEF-PROJET-2024.pdf</p>
+  </article>
+  <article>
+    <h3><a href="https://arcop.tg/appels-doffres/ami-2025-001-audit-des-comptes/">AMI N°001/2025/ARCOP/PRMP — Recrutement d'un cabinet pour l'audit des comptes de la commande publique</a></h3>
+    <p>Date de publication : 25 avril 2025. Cliquez sur le lien suivant pour lire l'AMI https://arcop.tg/wp-content/uploads/2025/04/AMI-AUDIT-2024.pdf</p>
+  </article>
+  <article>
+    <h3><a href="https://arcop.tg/appels-doffres/ami-2023-012-refonte-site-web/">AMI N°012/2023/ARCOP/PRMP — Prestations de refonte du site web institutionnel de l'ARCOP</a></h3>
+    <p>Date de publication : 12 octobre 2023. Pour plus de détails, consultez la consultation sur le portail.</p>
+  </article>
+</body>
+</html>

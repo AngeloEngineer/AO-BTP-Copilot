@@ -21,69 +21,19 @@ Usage :
 from __future__ import annotations
 
 import argparse
-import logging
-import re
 import sqlite3
-import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger(__name__)
+from http_client import fetch_html, log
+from classification import classify_btp
 
 BASE_URL = "https://www.marches-publics-togo.com"
 CONSULTATIONS_PATH = "/consultations"
-
-# User-Agent identifiable et honnête : c'est une bonne pratique de scraping, pas une
-# formalité. On s'annonce clairement plutôt que d'usurper un navigateur.
-HEADERS = {
-    "User-Agent": (
-        "AO-BTP-Copilot/0.1 (usage non commercial)"
-    )
-}
-
-REQUEST_TIMEOUT = 15
-POLITE_DELAY_SECONDS = 1.5  # entre deux requêtes, pour ne pas marteler le serveur
-
-# Le champ "type_marche" du site est déclaratif (rempli par l'entité publicatrice) et donc
-# incomplet : des AO clairement "Travaux" par leur objet apparaissent avec un type vide ou
-# "—" (ex. observé : "Travaux de réalisation de réseaux d'assainissement..." catégorisé
-# "—"). On comble ce trou par un classifieur mots-clés sur le titre, plutôt que de faire
-# confiance aveuglément au site. C'est volontairement un classifieur à base de règles (pas
-# de ML) : le signal lexical est fort et sans ambiguïté dans ce domaine (vocabulaire
-# normalisé des marchés publics), un modèle entraîné serait de la complexité inutile ici.
-BTP_KEYWORDS = [
-    "travaux", "construction", "réhabilitation", "rehabilitation", "réfection", "refection",
-    "bâtiment", "batiment", "génie civil", "genie civil", "voirie", "assainissement",
-    "forage", "aménagement", "amenagement", "électrification", "electrification",
-    "réseau", "reseau", "route", "pont", "ouvrage", "barrage", "irrigation",
-    "revêtement", "revetement", "adduction d'eau", "bitumage", "pavage",
-]
-BTP_KEYWORDS_PATTERN = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in BTP_KEYWORDS) + r")\b", re.IGNORECASE
-)
-
-
-def classify_btp(titre: str, type_marche_site: str | None) -> tuple[bool, str | None]:
-    """Détermine si une consultation relève du BTP/Travaux, en croisant l'étiquette du
-    site (fiable quand présente) et une détection lexicale sur le titre (filet de
-    sécurité quand l'étiquette est absente ou trompeuse).
-
-    Retourne (is_btp, source) où source vaut "site", "mots-clés" ou None.
-    """
-    if type_marche_site and type_marche_site.strip() not in ("", "—"):
-        is_travaux = type_marche_site.strip().lower() == "travaux"
-        return is_travaux, "site" if is_travaux else None
-
-    if BTP_KEYWORDS_PATTERN.search(titre):
-        return True, "mots-clés"
-
-    return False, None
 
 
 @dataclass
