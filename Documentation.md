@@ -1015,10 +1015,10 @@ AO-BTP Copilot/
 
 | Fichier | Rôle |
 |---|---|
-| `requirements.txt` | Dépendances : `requests>=2.31`, `beautifulsoup4>=4.12`, `lxml>=5.0`, `PyMuPDF>=1.24`, `python-docx>=1.1`, `pytest>=8.0` |
+| `requirements.txt` | Dépendances : ingestion + extraction + **benchmark LLM/notebook** (voir §32) |
 | `pytest.ini` | `testpaths = tests` ; `pythonpath = src` (permet d'importer les modules `src/` depuis les tests) |
 | `.gitignore` | Exclusions (cf. §31) |
-| (aucun `.env` / `.env.example`) | Aucune variable d'environnement requise à ce stade |
+| `.env.example` | **Gabarit des clés API optionales** (Gemini / Groq) pour le benchmark LLM — jamais de vrais secrets dedans, seul `.env` (non versionné) en contient |
 
 Note : les versions **exactes** installées dans `.venv` au moment de la documentation
 (constatées le 16/08/2026) sont : `requests 2.34.2`, `beautifulsoup4 4.15.0`, `lxml 6.1.1`,
@@ -1029,13 +1029,24 @@ restent volontairement souples (`>=`).
 
 ## 31. Variables d'environnement
 
-**Aucune variable d'environnement n'est requise à la date du document** (pas de fichier
-`.env`, pas de `.env.example`). Les URL des sources sont **codées en dur** dans les modules
-(ex. `BASE_URL`, `CORPUS_LEGAL_URL`).
+**Aucune variable d'environnement n'est *requise* pour l'ingestion/extraction** : les URL
+des sources sont **codées en dur** dans les modules (ex. `BASE_URL`, `CORPUS_LEGAL_URL`).
 
-Le `.gitignore` exclut déjà `.env` et `.env.*` — **quand** une clé d'API LLM sera ajoutée
-(J3), elle devra être placée dans un `.env` (jamais commitée) et chargée via une bibliothèque
-prévue à cet effet. — Voir [Sécurité](#44-sécurité-et-fiabilité).
+**Depuis le 16/08/2026, des variables *optionnelles* existent pour le benchmark LLM** :
+
+| Variable | Rôle | Requise |
+|---|---|---|
+| `GEMINI_API_KEY` | Authentification Gemini 3.5 Flash (benchmark §22.1) | Non (benchmark en mode trace sans elle) |
+| `GROQ_API_KEY` | Authentification Groq / DeepSeek (benchmark §22.1) | Non (idem) |
+
+**Mécanisme** : copier `.env.example` → `.env`, remplir les clés. Le noyau
+`src/llm_benchmark.py` charge `.env` via `python-dotenv` (fonction `load_dotenv`).
+Le fichier `.env` est **exclu du versionnage** (`.gitignore` §30) : les secrets ne doivent
+**jamais** être commités. S'il est absent, le notebook passe en **mode trace** (aucun appel
+réseau, réponses simulées explicitement marquées).
+
+> À noter : Ollama (local) n'utilise **pas** de clé — voir §22.1 (section commentée dans le
+> notebook, activation manuelle).
 
 ---
 
@@ -1303,7 +1314,8 @@ Test scraping ✅ → Test extraction ✅ → Test stockage ✅ → Test ingesti
 - **Leçon** : **jamais de secret en clair dans une conversation ou un commit** ; utiliser un
   gestionnaire de secrets (`.env` gitignoré, keyring, variables d'environnement).
 - **Risque futur** : tout nouvel appel API (LLM, etc.) introduira une clé — la règle
-  `.env` + `.gitignore` doit être appliquée dès J3.
+  `.env` + `.gitignore` est **d'application immédiate** : le mécanisme existe déjà depuis le
+  16/08 (`.env.example` versionné, `.env` ignoré, chargement via `python-dotenv`).
 
 ### Difficulté 2 — Espace disque insuffisant pour les dépendances / données
 
@@ -1575,9 +1587,11 @@ l'index FAISS, choix du hébergement de l'interface.
 
 ## 44. Sécurité et fiabilité
 
-- **Secrets** : aucun secret dans le dépôt. `.gitignore` exclut `.env` / `.env.*`. Leçon
+- **Secrets** : aucun secret dans le dépôt. `.gitignore` exclut `.env` / `.env.*`
+  (avec exception `!.env.example`, le gabarit de clés **sans valeur réelle**). Leçon
   J1 : un token GitHub exposé a été révoqué ; l'authentification utilise désormais le
-  **keyring** GitHub CLI. En J3, toute clé LLM ira dans un `.env` jamais commité.
+  **keyring** GitHub CLI. Depuis le 16/08, le benchmark LLM lit ses clés (Gemini/Groq)
+  **uniquement** depuis `.env` (jamais commité, cf. §30–31).
 - **Données sensibles** : les données manipulées sont **publiques** (avis d'AO, corpus de
   textes officiels). Aucune donnée personnelle.
 - **Appels externes** : politesse (User-Agent identifié, timeout, délais) ; les demandes de
