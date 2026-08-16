@@ -83,6 +83,31 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - Blocages : à documenter en session
 
 ### 17/08 (J2) — Corpus RAG — à venir
+
+### 16/08 (J2-bis) — Benchmark LLM (avancée préparatoire au RAG et au choix de modèle)
+- [x] Choix des modèles à challenger validé avec l'utilisateur : **Gemini 3.5 Flash**
+  (15 RPM / 1 500 RPD / contexte 1M, vérifié web le 16/08) + **Groq DeepSeek-R1-Distill-70B**
+  (gratuit, API OpenAI-compatible, plafond sortie 8K tokens à surveiller)
+- [x] Ollama local : prévu mais **section commentée** dans le notebook (utilisateur sur
+  data mobile limitée) — activation différée
+- [x] SDK installés : `google-genai 2.18.1`, `openai 3.1.0`, `ollama 0.6.2`,
+  `python-dotenv 1.2.3`, + jupyter lab / nbformat / nbconvert
+- [x] Corpus légal extrait en texte : `data/processed/corpus_legal_texte.txt`
+  (829 876 caractères, base du contexte fourni au benchmark)
+- [x] Jeu d'évaluation 7 questions : `data/eval/eval_questions.json`
+  (articles réels 12, 27, 28, 110-111, 113 du Recueil ; 1 piège de grounding ;
+  1 question « info absente » anti-hallucination)
+- [x] Noyau `src/llm_benchmark.py` : clients Gemini/Groq/(Ollama), prompts grounded,
+  scoring auto (piège / honnêteté / citations / faits) + juge LLM (note 0-5 sur
+  Langue / Conformité / Format) + pondération 7 critères → note finale /10
+- [x] Notebook `notebooks/benchmark_llm.ipynb` : protocole complet, exécutable en
+  **mode trace sans clé** (mock local explicite) ; validé de bout en bout
+  (12 cellules exécutées, aucune erreur, notes bornées 0-10)
+- [x] `.env.example` versionné (gabarit de clés) ; `.env` réel reste ignoré par Git
+- [ ] (bloquant utilisateur) créer son `.env` avec `GEMINI_API_KEY` / `GROQ_API_KEY`
+      puis relancer le notebook en mode réel pour obtenir les notes réelles
+- [ ] revue manuelle de l'échantillon (cellule 5 du notebook) et contre-échantillon
+
 ### 18/08 (J3) — Features LLM — à venir
 ### 19/08 (J4) — Interface + rigueur — à venir
 ### 20/08 (J5) — Marge — à venir
@@ -100,11 +125,19 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - FAISS local, pas de vector DB cloud
 - Appels API LLM directs (pas de LangChain) pour garder la maîtrise du mécanisme retrieval →
   prompt → génération
+- Benchmark LLM grounded : TOUS les modèles reçoivent le MÊME contexte (extraits du
+  corpus) → on isole la qualité modèle, pas celle du retrieval
+- Scoring mixte : **juge LLM** (modèle non concurrent) + **échantillon manuel** de
+  l'utilisateur (pas de full-auto ni de full-manuel)
+- Clés API : jamais commitées ; `.env` ignoré, `.env.example` versionné comme gabarit
+- Ollama : section commentée dans le notebook (data mobile limitée) ; activation dès
+  connexion illimitée
 
 ## Prochaine session
 
-Reprendre au Jour 1 — suite ingestion/extraction :
-- valider si nécessaire le parsing des pages de détail des AO (URL detail) et l'extraction
-  des PDF d'AO en cours, puis consolider extraction.db ;
-- enchaîner sur le **Jour 2 (corpus RAG)** : chunking du Recueil ARCOP 2024 par article,
-  embeddings, FAISS local — le texte du corpus est déjà extrait (829 876 caractères).
+Priorité :
+1. ⏳ (utilisateur) créer `.env` (copie de `.env.example`) + clés Gemini/Groq
+2. Lancer `notebooks/benchmark_llm.ipynb` en mode réel → notes réelles des 7 critères
+3. Revue manuelle de l'échantillon (cellule 5) pour valider/contredire les auto-scores
+4. Jour 2 (corpus RAG) : chunking du Recueil ARCOP 2024 par article, embeddings,
+   FAISS local (texte déjà extrait : 829 876 caractères)

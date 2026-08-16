@@ -1,0 +1,94 @@
+{
+  "meta": {
+    "libelle": "Jeu d'évaluation AO-BTP Copilot — challenge API (Gemini / Groq / ...)",
+    "description": "Questions ancrées dans le corpus légal réel (Recueil ARCOP 2024, texte extrait de data/processed/corpus_legal_texte.txt). Chaque question contient un contexte RAG fourni (extrait d'article réel) : on teste la capacité du modèle à répondre UNIQUEMENT à partir du contexte (grounding), à citer le bon article, à produire un français correct, etc. Les questions 'piege' contiennent un contexte qui CONTRE-DIT un fait courant : un bon modèle doit suivre le contexte (pas ses stéréotypes).",
+    "extrait_le": "2026-08-16",
+    "version": "1"
+  },
+  "questions": [
+    {
+      "id": "proc-01",
+      "categorie": "procedure",
+      "contexte": "L'appel d'offres ouvert en une étape est la procédure par laquelle l'autorité contractante choisit l'offre économiquement la plus avantageuse, sans négociation sur la base de critères objectifs préalablement portés à la connaissance des candidats. L'appel d'offres ouvert en une étape peut être précédé d'une pré-qualification, notamment lorsque le projet revêt un caractère complexe ou exige une technicité particulière. Tout opérateur économique intéressé peut soumissionner ou, lorsque l'appel d'offres est précédé d'une pré-qualification, soumettre un dossier de demande de pré-qualification.", 
+      "source_reelle": "Data/Fixtures — Recueil ARCOP 2024, DIRECTIVE N° 01/2022/CM/UEMOA, Article 12 : Appel d'offres ouvert en une étape (extrait)",
+      "citation_attendue": ["Article 12"],
+      "question": "Quelle est la procédure par laquelle l'autorité contractante choisit l'offre économiquement la plus avantageuse sans négociation, et un opérateur peut-il soumettre un dossier de pré-qualification dans ce cadre ?",
+      "faits_attendus": ["offre économiquement la plus avantageuse", "sans négociation", "pré-qualification", "dossier de demande de pré-qualification"],
+      "attendu_indicatif": "Citation à l'article 12 ; mention de l'offre économiquement la plus avantageuse, sans négociation ; possibilité de déposer un dossier de pré-qualification.",
+      "label_pour_juge": "La réponse : (1) cite l'article 12 ; (2) dit que c'est la procédure de l'offre économiquement la plus avantageuse sans négociation ; (3) dit qu'un opérateur peut soumettre un dossier de pré-qualification.",
+      "piège_grounding": false
+    },
+    {
+      "id": "delai-02",
+      "categorie": "delai",
+      "contexte": "A compter de la publication de l'avis de publicité préalable ou de la date d'envoi de l'invitation à soumissionner, le délai de réception des candidatures ou des offres ne peut être inférieur à : trente (30) jours calendaires pour les Partenariats Public-Privé dont la valeur estimée hors taxes, calculée conformément à l'article 3, est inférieure au seuil prévu à l'article 18, et ; quarante-cinq (45) jours calendaires pour les Partenariats Public-Privé dont la valeur estimée hors taxes, calculée conformément à l'article 3, est supérieure au seuil, prévu à l'article 18.",
+      "source_reelle": "Recueil ARCOP 2024, DIRECTIVE N° 01/2022/CM/UEMOA, Article 28 : Délai de réception des candidatures et des offres (extrait)",
+      "citation_attendue": ["Article 28"],
+      "question": "Quel est le délai minimal de réception des offres pour un PPP dont la valeur estimée HT est supérieure au seuil de l'article 18 ?",
+      "faits_attendus": ["quarante-cinq", "45", "jours calendaires"],
+      "attendu_indicatif": "Citation article 28 ; mention de 45 jours calendaires pour une valeur estimée HT supérieure au seuil.",
+      "label_pour_juge": "La réponse cite l'article 28 et indique 45 jours calendaires pour un PPP dont la valeur estimée HT est supérieure au seuil.",
+      "piège_grounding": false
+    },
+    {
+      "id": "garantie-03",
+      "categorie": "garantie",
+      "contexte": "La garantie de soumission n'est pas exigée pour les marchés passés suivant les procédures de demande de cotation et de demande de renseignement de prix. Le montant de la garantie de bonne exécution est de cinq pour cent (5 %) du montant de base du marché augmenté ou diminué, le cas échéant, de ses avenants. La garantie de bonne exécution doit être constituée dans les vingt (20) jours calendaires qui suivent la date de notification du marché et, en tout cas, avant le premier paiement. Elle n'est pas requise pour les marchés de prestations intellectuelles.",
+      "source_reelle": "Recueil ARCOP 2024, CGAP — Article 110 (Garantie de soumission) et Article 111 (Garantie de bonne exécution) (extraits)",
+      "citation_attendue": ["Article 111"],
+      "question": "Quel est le taux de la garantie de bonne exécution et dans quel délai doit-elle être constituée ?",
+      "faits_attendus": ["cinq pour cent", "5 %", "20 jours", "vingt jours calendaires", "avant le premier paiement"],
+      "attendu_indicatif": "Citation article 111 ; 5 % du montant de base du marché ; constituée dans les 20 jours calendaires suivant la notification et avant le premier paiement.",
+      "label_pour_juge": "La réponse cite l'article 111, indique 5 % du montant de base et un délai de constitution de 20 jours calendaires après notification, avant le premier paiement.",
+      "piège_grounding": false
+    },
+    {
+      "id": "piege-04",
+      "categorie": "piege_grounding",
+      "contexte": "Selon le présent texte, la garantie de bonne exécution n'est JAMAIS exigée pour les marchés de travaux. Elle est uniquement requise pour les marchés de fournitures. Le taux est fixé à deux pour cent (2 %) du montant de base du marché.",
+      "source_reelle": "Extrait VOLONTAIREMENT ALTÉRÉ (deuxième version du procès-verbal de la commission) cité à titre purement hypothétique dans ce contexte de test.",
+      "citation_attendue": [],
+      "question": "Selon le texte fourni, la garantie de bonne exécution est-elle exigée pour les marchés de travaux ? Quel est le taux indiqué ?",
+      "faits_attendus": ["non", "2 %", "deux pour cent", "marchés de fournitures"],
+      "attendu_indicatif": "Le but ici est de savoir si le modèle SUIT le contexte (fût-il contraire à la connaissance générale). Il doit répondre NON pour les travaux, oui pour les fournitures, et citer 2 %.",
+      "label_pour_juge": "La réponse doit suivre CE CONTEXTE PRÉCIS (même s'il contredit la réalité générale du code) : garantir que la garantie de bonne exécution n'est pas exigée pour les travaux dans ce texte, l'est pour les fournitures, avec un taux de 2 %. Toute réponse revenant au 'vrai' CGAP (5 %, exigée pour travaux) doit être pénalisée : c'est une perte de grounding.",
+      "piège_grounding": true
+    },
+    {
+      "id": "eligible-05",
+      "categorie": "capacite",
+      "contexte": "Sous réserve que le candidat ne fasse pas l'objet d'une interdiction de soumissionner définie par les Etats membres, les autorités contractantes, quelle que soit la procédure de passation mise en œuvre, ne peuvent imposer aux candidats que des conditions de participation propres à garantir qu'ils disposent : de la capacité juridique à déposer une candidature et/ou une offre ; des capacités professionnelles, techniques, économiques et financières suffisantes pour l'exécution du projet. Les autorités contractantes vérifient que les candidats présentent les capacités requises. Les justifications des capacités et les conditions de présentation des candidatures sont précisées dans l'avis de publicité préalable ou dans les documents de la consultation.",
+      "source_reelle": "Recueil ARCOP 2024, DIRECTIVE N° 01/2022/CM/UEMOA, Article 27 : Conditions de participation et modalités de vérification des capacités des candidats (extrait)",
+      "citation_attendue": ["Article 27"],
+      "question": "Quelles sont les conditions de participation que les autorités contractantes peuvent imposer aux candidats, et où sont précisées les justifications des capacités ?",
+      "faits_attendus": ["capacité juridique", "capacités professionnelles", "techniques", "économiques", "financières", "avis de publicité préalable", "documents de la consultation"],
+      "attendu_indicatif": "Citation article 27 ; conditions limitées : capacité juridique, capacités professionnelles/techniques/économiques/financières suffisantes ; justifications précisées dans l'avis de publicité préalable ou les documents de la consultation.",
+      "label_pour_juge": "La réponse cite l'article 27, énumère les conditions (capacité juridique ; capacités pro/techniques/éco/financières) et le lieu où elles sont précisées (avis de publicité préalable / documents de consultation).",
+      "piège_grounding": false
+    },
+    {
+      "id": "absent-06",
+      "categorie": "info_absente",
+      "contexte": "Le dossier d'appel à la concurrence : document comprenant les conditions de participation et les renseignements nécessaires pour l'élaboration de la soumission, l'attribution du marché et son exécution. La fraude : tout manquement intentionnel à une obligation légale ou réglementaire en matière de marchés publics.",
+      "source_reelle": "Recueil ARCOP 2024, CGAP — définitions (extraits)",
+      "citation_attendue": [],
+      "question": "Selon le texte fourni, quel est le délai de retrait d'un dossier d'appel à la concurrence ?",
+      "faits_attendus": ["introuvable", "ne peut pas répondre", "pas d'information", "n'apparaît pas"],
+      "attendu_indicatif": "Le contexte ne mentionne AUCUN délai de retrait. Un bon modèle doit répondre explicitement que cette information n'est pas dans le contexte (honnêteté / anti-hallucination), et ne doit pas inventer un délai.",
+      "label_pour_juge": "Le contexte donné ne contient aucune information sur le délai de retrait. La réponse doit le dire explicitement (ex. 'le texte ne le précise pas') et ne doit pas inventer de délai. Toute invention d'un délai est à pénaliser.",
+      "piège_grounding": false
+    },
+    {
+      "id": "presta-intel-07",
+      "categorie": "garantie",
+      "contexte": "La garantie de bonne exécution est fixée dans le cahier des charges et est proportionnelle avec l'objet du marché. Elle n'est pas requise pour les marchés de prestations intellectuelles. La retenue de garantie n'est pas exigée pour les marchés de prestations intellectuelles.",
+      "source_reelle": "Recueil ARCOP 2024, CGAP — Article 111 (Garantie de bonne exécution) et Article 113 (Retenue de garantie) (extraits)",
+      "citation_attendue": ["Article 111", "Article 113"],
+      "question": "Pour quel type de marché la garantie de bonne exécution et la retenue de garantie ne sont-elles pas exigées ?",
+      "faits_attendus": ["prestations intellectuelles"],
+      "attendu_indicatif": "Réponse : marchés de prestations intellectuelles ; citation articles 111 (bonne exécution) et 113 (retenue).",
+      "label_pour_juge": "La réponse indique 'prestations intellectuelles' et cite les articles 111 et 113.",
+      "piège_grounding": false
+    }
+  ]
+}
