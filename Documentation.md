@@ -870,8 +870,8 @@ corpus réel), on compare donc la *qualité modèle*, pas la *qualité RAG*.
 
 | Fournisseur | Modèle | Accès | Quota | Particularité |
 |---|---|---|---|---|
-| Google | `gemini-3.5-flash` | gratuit, clé AI Studio | 15 RPM / 1 500 RPD / contexte 1M | candidat principal |
-| Groq | `deepseek-r1-distill-70b` | gratuit, sans CB, API OpenAI-compatible | ~30 RPM / 14 400 RPD | latence LPU ; **sortie plafonnée 8K tokens** (troncature possible) |
+| Google | `gemini-3.5-flash` | gratuit, clé AI Studio | **20 req/jour** (quota free tier constaté en réel le 17/08 ; variable selon compte/région) | candidat principal ; quota journalier faible — à surveiller |
+| Groq | `openai/gpt-oss-120b` | gratuit, sans CB, API OpenAI-compatible | ~30 RPM / 14 400 RPD | modèle 120B open-weight ; remplace le retiré de Groq `deepseek-r1-distill-70b` (404 vérifié en réel le 17/08) |
 
 **Ollama local** (modèle choix libre comme `qwen3:8b`) : prévu mais **désactivé par défaut**
 dans le notebook (utilisateur sur data mobile limitée). Section commentée à activer manuellement.
@@ -1037,7 +1037,7 @@ des sources sont **codées en dur** dans les modules (ex. `BASE_URL`, `CORPUS_LE
 | Variable | Rôle | Requise |
 |---|---|---|
 | `GEMINI_API_KEY` | Authentification Gemini 3.5 Flash (benchmark §22.1) | Non (benchmark en mode trace sans elle) |
-| `GROQ_API_KEY` | Authentification Groq / DeepSeek (benchmark §22.1) | Non (idem) |
+| `GROQ_API_KEY` | Authentification Groq / openai/gpt-oss-120b (benchmark §22.1) | Non (idem) |
 
 **Mécanisme** : copier `.env.example` → `.env`, remplir les clés. Le noyau
 `src/llm_benchmark.py` charge `.env` via `python-dotenv` (fonction `load_dotenv`).

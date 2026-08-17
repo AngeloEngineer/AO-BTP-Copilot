@@ -86,12 +86,20 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 
 ### 16/08 (J2-bis) — Benchmark LLM (avancée préparatoire au RAG et au choix de modèle)
 - [x] Choix des modèles à challenger validé avec l'utilisateur : **Gemini 3.5 Flash**
-  (15 RPM / 1 500 RPD / contexte 1M, vérifié web le 16/08) + **Groq DeepSeek-R1-Distill-70B**
-  (gratuit, API OpenAI-compatible, plafond sortie 8K tokens à surveiller)
+  (15 RPM / 1 500 RPD / contexte 1M, vérifié web le 16/08) + **Groq openai/gpt-oss-120b**
+  (gratuit, API OpenAI-compatible ; remplace le retiré de Groq deepseek-r1-distill-70b,
+  404 vérifié en réel le 17/08)
 - [x] Ollama local : prévu mais **section commentée** dans le notebook (utilisateur sur
   data mobile limitée) — activation différée
 - [x] SDK installés : `google-genai 2.18.1`, `openai 3.1.0`, `ollama 0.6.2`,
   `python-dotenv 1.2.3`, + jupyter lab / nbformat / nbconvert
+- [x] Kernel notebook corrigé : `benchllm` (pointe vers le venv → résout
+  `ModuleNotFoundError: openai` dans nbconvert)
+- [x] `load_dotenv()` explicite dans le notebook (clés depuis `.env` à la racine)
+- [x] Exécution réelle (17/08) : **Groq 7/7 OK** (~1-6 s/req) ; **Gemini bloqué**
+  par quota free tier réel = **20 req/jour** (429 RESOURCE_EXHAUSTED, vérifié en
+  direct le 17/08 ; variable selon compte) ; indices affichés d'erreur ajoutés ;
+  retry 429 (backoff) ajoutée dans `call_model`
 - [x] Corpus légal extrait en texte : `data/processed/corpus_legal_texte.txt`
   (829 876 caractères, base du contexte fourni au benchmark)
 - [x] Jeu d'évaluation 7 questions : `data/eval/eval_questions.json`
@@ -106,6 +114,8 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - [x] `.env.example` versionné (gabarit de clés) ; `.env` réel reste ignoré par Git
 - [ ] (bloquant utilisateur) créer son `.env` avec `GEMINI_API_KEY` / `GROQ_API_KEY`
       puis relancer le notebook en mode réel pour obtenir les notes réelles
+- [ ] **attente quota Gemini** : relancer après minuit Pacific (le quota à 20 req/jour
+      se réinitialise) pour obtenir les réponses + juge Gemini
 - [ ] revue manuelle de l'échantillon (cellule 5 du notebook) et contre-échantillon
 
 ### 18/08 (J3) — Features LLM — à venir

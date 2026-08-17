@@ -1,6 +1,6 @@
 """Noyau du benchmark LLM — AO-BTP Copilot.
 
-But : challenger les modèles candidats (Gemini 3.5 Flash, Groq DeepSeek-R1-Distill,
+But : challenger les modèles candidats (Gemini 3.5 Flash, Groq openai/gpt-oss-120b,
 Ollama local, etc.) sur 7 critères clés, à partir d'un jeu d'évaluation grounded
 (questions ancrées sur le corpus légal réel) et, pour les critères qualitatifs,
 d'un score attribué par un "juge LLM" (un autre modèle, si possible non concurrent)
@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from time import perf_counter
 
@@ -53,19 +54,22 @@ MODELS_CATALOG: dict[str, dict] = {
         "prix_in_par_million": 1.50,
         "prix_out_par_million": 9.00,
         "quota_rpm": 15,
-        "quota_rpd": 1500,
+        "quota_rpd": 20,
         "gratuit": True,
-        "note": "Modèle choisi par l'utilisateur (première option). Vérifié le 16/08/2026.",
+        "note": "Modèle choisi par l'utilisateur (première option). Vérifié le 16/08/2026. "
+                "Quota free tier réel constaté le 17/08/2026 : 20 req/jour (429 RESOURCE_EXHAUSTED, "
+                "quotaValue 20, par projet et par modèle, réinit à minuit Pacific) — variable selon compte.",
     },
-    "groq-deepseek-r1-distill-70b": {
+    "groq-gpt-oss-120b": {
         "fournisseur": "groq",
-        "modele": "deepseek-r1-distill-70b",
+        "modele": "openai/gpt-oss-120b",
         "prix_in_par_million": 0.0,  # gratuit
         "prix_out_par_million": 0.0,
         "quota_rpm": 30,
         "quota_rpd": 14400,
         "gratuit": True,
-        "note": "Challenger vitesse/coût proposé par l'utilisateur. API compatible OpenAI.",
+        "note": "Challenger Groq validé par l'utilisateur le 17/08/2026 (deepseek-r1-distill-70b "
+                "retiré de Groq — 404 vérifié en réel). API compatible OpenAI.",
     },
 }
 
@@ -98,62 +102,74 @@ def build_ollama_client():
 # ---------------------------------------------------------------------------
 
 def call_model(provider_id: str, system: str, user: str,
-               max_output_tokens: int = 1500) -> dict:
+               max_output_tokens: int = 1500,
+               retry_429: int = 3, backoff_base: float = 8.0) -> dict:
     """Appelle le modèle désigné et retourne un dict normalisé.
 
     Retourne : {"text": str, "usage_in": int, "usage_out": int,
                 "ok": bool, "erreur": str|None}
-    Fait du retry minimal (1 nouvel essai) en cas d'échec réseau transitoire.
+    Fait une retry limitée (retry_429, backoff exponentiel) quand le fournisseur
+    renvoie un 429 (quota/réservation) : ces erreurs sont souvent transitoires
+    (le quota se libère en quelques secondes à minutes). Les autres erreurs
+    (auth, modèle absent…) ne sont pas retentées.
     """
     start = perf_counter()
     usage_in = usage_out = 0
-    try:
-        if provider_id == "gemini":
-            client = build_gemini_client()
-            resp = client.models.generate_content(
-                model=MODELS_CATALOG["gemini-3.5-flash"]["modele"],
-                contents=user,
-                config={"system_instruction": system,
-                        "max_output_tokens": max_output_tokens},
-            )
-            text = (resp.text or "").strip()
-            if resp.usage_metadata:
-                usage_in = resp.usage_metadata.prompt_token_count or 0
-                usage_out = resp.usage_metadata.candidates_token_count or 0
+    last_err = ""
+    for essai in range(retry_429 + 1):
+        try:
+            if provider_id == "gemini":
+                client = build_gemini_client()
+                resp = client.models.generate_content(
+                    model=MODELS_CATALOG["gemini-3.5-flash"]["modele"],
+                    contents=user,
+                    config={"system_instruction": system,
+                            "max_output_tokens": max_output_tokens},
+                )
+                text = (resp.text or "").strip()
+                if resp.usage_metadata:
+                    usage_in = resp.usage_metadata.prompt_token_count or 0
+                    usage_out = resp.usage_metadata.candidates_token_count or 0
 
-        elif provider_id == "groq":
-            client = build_groq_client()
-            resp = client.chat.completions.create(
-                model=MODELS_CATALOG["groq-deepseek-r1-distill-70b"]["modele"],
-                messages=[{"role": "system", "content": system},
-                          {"role": "user", "content": user}],
-                max_tokens=max_output_tokens,
-            )
-            text = (resp.choices[0].message.content or "").strip()
-            if resp.usage:
-                usage_in = resp.usage.prompt_tokens or 0
-                usage_out = resp.usage.completion_tokens or 0
+            elif provider_id == "groq":
+                client = build_groq_client()
+                resp = client.chat.completions.create(
+                    model=MODELS_CATALOG["groq-gpt-oss-120b"]["modele"],
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": user}],
+                    max_tokens=max_output_tokens,
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                if resp.usage:
+                    usage_in = resp.usage.prompt_tokens or 0
+                    usage_out = resp.usage.completion_tokens or 0
 
-        elif provider_id == "ollama":
-            client = build_ollama_client()
-            resp = client.chat(
-                model=MODELS_CATALOG.get(provider_id, {}).get("modele", "qwen3:8b"),
-                messages=[{"role": "system", "content": system},
-                          {"role": "user", "content": user}],
-                options={"num_predict": max_output_tokens},
-            )
-            text = (resp["message"]["content"] or "").strip()
+            elif provider_id == "ollama":
+                client = build_ollama_client()
+                resp = client.chat(
+                    model=MODELS_CATALOG.get(provider_id, {}).get("modele", "qwen3:8b"),
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": user}],
+                    options={"num_predict": max_output_tokens},
+                )
+                text = (resp["message"]["content"] or "").strip()
 
-        else:
-            return {"text": "", "usage_in": 0, "usage_out": 0,
-                    "ok": False, "erreur": f"Fournisseur inconnu: {provider_id}"}
+            else:
+                return {"text": "", "usage_in": 0, "usage_out": 0,
+                        "ok": False, "erreur": f"Fournisseur inconnu: {provider_id}"}
 
-        dur = perf_counter() - start
-        return {"text": text or "", "usage_in": usage_in, "usage_out": usage_out,
-                "ok": True, "erreur": None, "duree_s": dur}
-    except Exception as exc:  # noqa: BLE001 — le benchmark doit toujours remonter
-        return {"text": "", "usage_in": 0, "usage_out": 0,
-                "ok": False, "erreur": f"{type(exc).__name__}: {exc}"}
+            dur = perf_counter() - start
+            return {"text": text or "", "usage_in": usage_in, "usage_out": usage_out,
+                    "ok": True, "erreur": None, "duree_s": dur}
+        except Exception as exc:  # noqa: BLE001 — le benchmark doit toujours remonter
+            last_err = f"{type(exc).__name__}: {exc}"
+            is_quota = "429" in last_err or "RESOURCE_EXHAUSTED" in last_err
+            if not is_quota:
+                break
+            if essai < retry_429:
+                time.sleep(backoff_base * (2 ** essai))  # 8 s, 16 s, 32 s…
+    return {"text": "", "usage_in": 0, "usage_out": 0,
+            "ok": False, "erreur": last_err}
 
 
 # ---------------------------------------------------------------------------
