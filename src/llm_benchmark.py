@@ -238,28 +238,43 @@ def score_citations(reponse: str, citation_attendue: list[str]) -> float:
     return 0.0
 
 
+def _negation_travaux(reponse: str) -> bool:
+    """Détecte une formulation du type « (n'est) pas/jamais exigée pour les travaux ».
+
+    La clause contenant « exigée/requise/… » doit précéder « travaux » dans la
+    même proposition, et contenir un marqueur de négation (frontières de mot :
+    `\bne\b` ne matche pas « boNNE ») — évite les faux positifs (« est exigée pour
+    les travaux » sans négation) comme les faux négatifs (« n'est JAMAIS exigée »).
+    """
+    lowered = reponse.lower()
+    for mot in ("exigée", "exigee", "exigé", "exige", "requise", "requis",
+                "obligatoire", "applicable"):
+        m = re.search(r"([^.;]{0,40})" + mot + r"[^.;]*?(?:travaux)", lowered)
+        if m and re.search(r"\b(pas|jamais|non|ne|n'est|n’est)\b", m.group(1)):
+            return True
+    return False
+
+
 def score_piege_grounding(reponse: str, question: dict) -> float:
     """Pour les questions pièges : 1.0 si le modèle suit le contexte piégé
     (répond 'non', '2 %', 'fournitures'), 0.0 sinon (il reprend sa connaissance)."""
-    faits_negatifs = ["non exigée pour les travaux", "pas exigée pour les travaux",
-                      "n'est pas exigée pour les travaux", "pour les travaux", "travaux"]
-    mots_travaux = re.search(r"\b(travaux)\b", reponse, re.IGNORECASE)
-    # Suit le contexte piège si la réponse fait référence à "travaux" + "non" OU
-    # "fournitures" + "2 %".
-    a_fournitures = re.search(r"\b(fournitures)\b", reponse, re.IGNORECASE) is not None
-    a_2pct = re.search(r"2\s*%|deux\s+pour\s+cent", reponse, re.IGNORECASE) is not None
-    a_non_travaux = re.search(r"\bnon\b", reponse, re.IGNORECASE) is not None and \
-        re.search(r"\b(travaux)\b", reponse, re.IGNORECASE) is not None
-    if (a_fournitures and a_2pct) or a_non_travaux:
-        return 1.0
-    return 0.0
+    lowered = reponse.lower()
+    a_non_travaux = _negation_travaux(reponse)
+    a_fournitures = r"\bfournitures\b" in lowered
+    a_2pct = re.search(r"2\s*%|deux\s+pour\s+cent", lowered) is not None
+    # Suit le contexte piège si : fournitures + 2 %, ou négation liée aux travaux + 2 %.
+    return 1.0 if (a_fournitures or a_non_travaux) and a_2pct else 0.0
 
 
 def score_info_absente(reponse: str, question: dict) -> float:
     """Pour les questions 'info absente' : 1.0 si le modèle déclare ne pas
     savoir (honnêteté), 0.0 s'il invente."""
     reconnu_inconnu = re.search(
-        r"(ne (le )?pr[eé]cise|introuvable|pas (d'|de )?information|ne (le )?(mentionne|dit|précise) |contient pas|absent du contexte|pas dans le contexte)",
+        r"(ne (le )?pr[eé]cise|(n'|n’)?est (pas|jamais) pr[eé]cis[ée]?|"
+        r"(pas|non) pr[eé]cis[ée]?|introuvable|inconnu|"
+        r"pas (d'|de )?information|ne (le )?(mentionne|dit|précise) |"
+        r"contient pas|absent du contexte|pas dans le contexte|"
+        r"ne (le )?pr[eé]cise pas|aucune (date|indication|information))",
         reponse, re.IGNORECASE)
     invente_delai = re.search(r"\b\d+\s*(jours|mois)\b", reponse, re.IGNORECASE)
     if reconnu_inconnu and not invente_delai:

@@ -146,14 +146,42 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
   **mode trace sans clé** (mock local explicite) ; validé de bout en bout
   (12 cellules exécutées, aucune erreur, notes bornées 0-10)
 - [x] `.env.example` versionné (gabarit de clés) ; `.env` réel reste ignoré par Git
-- [ ] (bloquant utilisateur) créer son `.env` avec `GEMINI_API_KEY` / `GROQ_API_KEY`
-      puis relancer le notebook en mode réel pour obtenir les notes réelles
-- [ ] **attente quota Gemini** : relancer après minuit Pacific (le quota à 20 req/jour
-      se réinitialise) pour obtenir les réponses + juge Gemini
-- [ ] revue manuelle de l'échantillon (cellule 5 du notebook) et contre-échantillon
+- [x] (fait hors notebook le 18/08) `.env` réel rempli (clés Gemini + Groq présentes)
 
-### 18/08 (J3) — Features LLM — à venir
-### 19/08 (J4) — Interface + rigueur — à venir
+### 18/08 (J3) — Features LLM + benchmark Ollama réel
+- [x] **`src/llm_features.py`** : résumé, checklist d'éligibilité sourcée, chat Q&A
+  grounded — chaque feature récupère le contexte via l'index FAISS réel puis
+  appelle le modèle avec un prompt grounded (système « réponds UNIQUEMENT à partir
+  du contexte, cite les articles ») ; génération **injectable** → testable sans réseau
+- [x] Taille de sortie bornée (def. 500 tokens) : llama3.2:1b en CPU ≈ 6 s / 120 tokens,
+  un résumé k=3 ~128 s (prompt-processing du contexte RAG lourd) — latence à
+  documenter côté UI
+- [x] **Benchmark Ollama réel** : `scripts/benchmark_ollama_reel.py` (repli léger au
+  notebook, export CSV) — exécuté : `llama3.2:1b` répond grounded sur le fond
+  (proc/délai/garantie/piège suivis) mais **cite des articles/fausses références**
+  (ex. « Décret 2019-1010 » inventé, « Article 1/2 » au lieu de 27) → **cit=0 sur
+  toutes les questions attendues**. C'était le handicap pressenti d'un modèle 1B.
+- [x] Corrections du scoring (2 bugs + 1 faux positif découverts en réel) :
+  - `score_info_absente` ne reconnaissait pas « n'est pas précisé » (honnêteté réelle)
+  - `score_piege_grounding` : « non » isolé → faux positif ; « n'est JAMAIS exigée »
+    non détecté ; clause négation + travaux redéfinie (`_negation_travaux`)
+  - tests dédiés : `tests/test_llm_benchmark_scoring.py` (10 cas réels)
+- [x] Tests : **67 au total, verts**
+- [x] **Décision produit (18/08)** : modèle par défaut des features = **Groq
+  gpt-oss-120b** (citations fiables) ; **Ollama llama3.2:1b en repli** hors-ligne
+  (`provider="ollama"`), limites documentées
+- [x] Borne de sortie features = 1000 tokens + garde-fou « réponse vide » :
+  gpt-oss-120b est un modèle à raisonnement — à max=500 il consommait ses tokens
+  en raisonnement et renvoyait un texte vide (usage_out=500, text=""), constaté
+  en réel ; erreur claire si ça se reproduit
+- [x] Test réel des 3 features avec Groq sur AO-2026-00009 : résumé correct,
+  checklist grounded sourcée (tableau À vérifier / Règle / Référence, ex. art. 29
+  loi-2021-034), chat avec citations exactes (art. 3 décret 2018-171, tableau des
+  seuils) — ~15-65 s/réponse
+- [x] Tests : **69 au total, verts**
+- [ ] (J4) interface Streamlit branchée sur llm_features + latence affichée
+- [ ] (attente quota) ré-essayer Gemini + juge LLM Gemini pour compléter la matrice
+- [ ] revue manuelle de l'échantillon (cellule 5 du notebook) et contre-échantillon
 ### 20/08 (J5) — Marge — à venir
 
 ## Décisions techniques (log cumulatif)
@@ -182,18 +210,16 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 
 ## Prochaine session
 
-Priorité (J3 — features LLM, RAG complet et validé) :
-1. **Couche application LLM** (`src/llm_features.py` ?) branchée sur la recherche
-   FAISS : résumé, checklist d'éligibilité sourcée (citation d'article), chat Q&A
-   grounded. Modèle à trancher : **Ollama llama3.2:1b** (local, déjà installé) ou
-   API Groq/Gemini — voir `src/llm_benchmark.py` pour la couche d'appels.
-2. Benchmarquer **Ollama llama3.2:1b en réel** (section Ollama du notebook
-   `benchmark_llm.ipynb` encore en mode trace) : décommenter la section Ollama.
-3. Ré-essayer **Gemini** après réinitialisation du quota free tier (20 req/jour)
-   pour compléter la matrice benchmark.
-4. Committer le travail RAG non versionné (chunking/embeddings/index_rag/tests +
-   PROGRESS/Documentation/notebook modifiés).
-5. J4 interface : Streamlit (liste AO, fiche détail, chat) — fichier d'entrée attaché
-   au scope.
-6. (repli) benchmark corpus en mock : la requête « appel d'offres ouvert en une étape »
-   doit ramener Directive 01/2022 art. 12 ; déjà vérifié en réel (0.8168).
+Priorité (J3 fini → J4 — interface, RAG complet + features codées) :
+1. **(décision produit enclenche J4)** modèle par défaut des features : Ollama
+   `llama3.2:1b` est lent (~2 min/résumé k=3) et **cite des articles inexacts**
+   (benchmark réel 18/08 : cit=0 partout, halo « Décret 2019-1010 ») ; **Groq
+   gpt-oss-120b** (gratuit) est fiable (7/7, citations exactes) mais nécessite
+   réseau. Recommandation : défaut = groq, `--provider ollama` en repli offline.
+2. **Interface Streamlit** (J4) : liste des AO (consultations.db), fiche détail
+   (champs extraits), onglets Résumé / Checklist éligibilité / Chat Q&A — tous
+   branchés sur `llm_features.py`, avec indicateur de durée d'appel.
+3. Committer le bloc J3 (llm_features, benchmark_ollama_reel, scoring corrigé,
+   tests, PROGRESS/Documentation).
+4. (attente quota) ré-essayer Gemini + juge LLM pour compléter la matrice benchmark.
+5. Revue manuelle de l'échantillon (cellule 5 du notebook) / contre-échantillon.
