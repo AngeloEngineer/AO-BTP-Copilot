@@ -82,7 +82,41 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - Décisions techniques : voir section ci-dessous
 - Blocages : à documenter en session
 
-### 17/08 (J2) — Corpus RAG — à venir
+### 17/08 (J2) — Corpus RAG — chunking **RÉALISÉ le 18/08**
+- [x] Analyse du corpus : le texte extrait (`corpus_legal_texte.txt`) était **dégradé**
+  par le désordre du PDF 2 colonnes (126 baisses de numérotation)
+- [x] Corrigé à la source : ré-extraction par **blocs triés sur coordonnées**
+  (`round(y/12), x`) → 12 baisses seulement (toutes = resets entre textes) ;
+  fichier `data/processed/corpus_legal_texte_ordonne.txt`
+- [x] Normalisation des glyphes du PDF : ligatures (ﬁ, ﬀ, ﬂ) + apostrophes/guillemets
+  courbes → ASCII (sinon motifs et embeddings faussés)
+- [x] `src/chunking.py` : `extraire_texte_ordonne`, découpage par article
+  (`Article premier/1er/N`, `Art.` géré), nettoyage des artéfacts (en-têtes de page,
+  `er`, numéros de page, TITRE/CHAPITRE), attribution documentaire ordinale + motifs
+- [x] **647 articles → `data/processed/corpus_chunks.json`** (un chunk = un article)
+  répartis en **14 textes** : Directive 01/2022, Loi 2021-033, Décret 2022-080,
+  2022-063, 2022-070, 2022-092, 2019-096, 2019-097, 2018-171, 2018-028, Arrêté
+  087, Loi 2021-034, Décrets 2022-065 et 2022-066 — 0 « inconnu »
+- [x] Tests : `tests/test_chunking.py` (8 tests) et `tests/test_index_rag.py`
+  (10 tests) — **44 tests au total, verts**
+- [x] **Embeddings + FAISS implémentés** (code) : `src/embeddings.py`
+  (`paraphrase-multilingual-MiniLM-L12-v2`, 384 dims, local FR) + `src/index_rag.py`
+  (IndexFlatIP, cosinus normalisé, sauvegarde/rechargement `index.faiss`+`meta.json`
+  +`config.json`, recherche top-k avec score)
+- [x] Chaîne validée de bout en bout sur le **vrai corpus en mock** (647 chunks,
+  build + query + reload) — le rang en mock n'est pas sémantique (attendu)
+- [x] `pip install sentence-transformers` + 1er build `--backend local` → vrai modèle
+  multilingue téléchargé, `data/processed/faiss/` généré (647 chunks, dim 384)
+- [x] **Rang sémantique validé sur le réel** : requête « appel d'offres ouvert en une
+  étape » → **Directive 01/2022, art. 12 en tête** (score 0.8168) ; « garantie de
+  bonne exécution taux » → décret 2022-065 PPP art. 29/28
+- [x] Ollama : `qwen3.6:27b` retiré (disque), **`llama3.2:1b` installé** (1.3 GB,
+  modèle de génération léger local pour le RAG/features)
+- [x] Bug CLI corrigé : `index_rag.py query` suit le backend de `config.json`
+  (`resoudre_backend`, auto par défaut) — avant, défaut `mock` (dim 16) plantait
+  l'index réel (dim 384) en `AssertionError`
+- [x] Tests : `tests/test_chunking.py` (8 tests) + `tests/test_index_rag.py` (12 tests
+  dont auto-backend) — **45 tests au total, verts**
 
 ### 16/08 (J2-bis) — Benchmark LLM (avancée préparatoire au RAG et au choix de modèle)
 - [x] Choix des modèles à challenger validé avec l'utilisateur : **Gemini 3.5 Flash**
@@ -140,14 +174,26 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - Scoring mixte : **juge LLM** (modèle non concurrent) + **échantillon manuel** de
   l'utilisateur (pas de full-auto ni de full-manuel)
 - Clés API : jamais commitées ; `.env` ignoré, `.env.example` versionné comme gabarit
-- Ollama : section commentée dans le notebook (data mobile limitée) ; activation dès
-  connexion illimitée
+- Ollama : **modèle de génération local retenu : `llama3.2:1b`** (1.3 GB, installé le
+  18/08/2026) ; `qwen3.6:27b` (17 GB) retiré pour libérer le disque. Section notebook
+  benchmark commentée → à activer pour le benchmark réel d'Ollama
+- PDF 2 colonnes : **ré-extraction par coordonnées** plutôt qu'utiliser le flux du fichier
+  (l'ordre du flux intercale les colonnes → 126 vs 12 baisses de numérotation)
 
 ## Prochaine session
 
-Priorité :
-1. ⏳ (utilisateur) créer `.env` (copie de `.env.example`) + clés Gemini/Groq
-2. Lancer `notebooks/benchmark_llm.ipynb` en mode réel → notes réelles des 7 critères
-3. Revue manuelle de l'échantillon (cellule 5) pour valider/contredire les auto-scores
-4. Jour 2 (corpus RAG) : chunking du Recueil ARCOP 2024 par article, embeddings,
-   FAISS local (texte déjà extrait : 829 876 caractères)
+Priorité (J3 — features LLM, RAG complet et validé) :
+1. **Couche application LLM** (`src/llm_features.py` ?) branchée sur la recherche
+   FAISS : résumé, checklist d'éligibilité sourcée (citation d'article), chat Q&A
+   grounded. Modèle à trancher : **Ollama llama3.2:1b** (local, déjà installé) ou
+   API Groq/Gemini — voir `src/llm_benchmark.py` pour la couche d'appels.
+2. Benchmarquer **Ollama llama3.2:1b en réel** (section Ollama du notebook
+   `benchmark_llm.ipynb` encore en mode trace) : décommenter la section Ollama.
+3. Ré-essayer **Gemini** après réinitialisation du quota free tier (20 req/jour)
+   pour compléter la matrice benchmark.
+4. Committer le travail RAG non versionné (chunking/embeddings/index_rag/tests +
+   PROGRESS/Documentation/notebook modifiés).
+5. J4 interface : Streamlit (liste AO, fiche détail, chat) — fichier d'entrée attaché
+   au scope.
+6. (repli) benchmark corpus en mock : la requête « appel d'offres ouvert en une étape »
+   doit ramener Directive 01/2022 art. 12 ; déjà vérifié en réel (0.8168).

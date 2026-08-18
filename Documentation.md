@@ -726,32 +726,57 @@ doubler).
 
 ## 16. Corpus juridique
 
-État réel au 16/08/2026 :
+État réel au 18/08/2026 :
 
-- **Téléchargé** : `RECUEIL-DES-TEXTES-DE-LA-COMMANDE-PUBLIQUE-EDITION-2024-ARCOP-PDF-2.pdf`
-  (39 174 181 octets) dans `data/raw/corpus_legal/`.
-- **Texte extrait** : ≈ 829 876 caractères (observé lors de l'exécution d'extraction). (Ce
-  texte n'est **pas encore** persisté dans une table dédiée dans la version courante des
-  bases ; il l'a été dans un stockage d'analyse — **Information à re-vérifier** : la persistance
-  du texte du corpus dans `extraction.db` n'est pas démontrée dans le code lu.)
-- **Chunking / embeddings / index FAISS** : **non implémentés (J2 prévu).**
-
-**Information non déterminée dans l'état actuel du projet** : l'emplacement exact de
-persistance du texte du corpus extrait (les 829 876 caractères).
+- **PDF source** : `RECUEIL-DES-TEXTES-DE-LA-COMMANDE-PUBLIQUE-EDITION-2024-ARCOP-PDF-2.pdf`
+  (39 174 181 octets, 386 pages) dans `data/raw/corpus_legal/`.
+- **Texte ordonné** (ré-extraction corrigée) : `data/processed/corpus_legal_texte_ordonne.txt`
+  (≈ 833 702 caractères). L'extraction initiale `corpus_legal_texte.txt` était **dégradée**
+  (ordre des colonnes du PDF 2 colonnes mélangé : 126 baisses de numérotation vs **12**
+  après correction — les 12 restantes sont les redémarrages de numérotation entre textes).
+- **Corpus = 14 textes** (recueil ARCOP 2024) : 2 directives, 2 lois, 9 décrets, 1 arrêté.
+  Détail en §38.2 (contribution chunking).
+- **Chunking** : **implémenté** (`src/chunking.py`) — **647 articles** découpés en chunks
+  à `data/processed/corpus_chunks.json` (un chunk = un article, rattaché à son document).
+- **Embeddings / index FAISS** : non implémentés (prévu, modèle Ollama `qwen3.6:27b` filtré
+  localement).
 
 ---
 
 ## 17. Préparation du corpus (chunking)
 
-> ⏳ **Non implémenté — prévu en J2.** Cette section décrit l'intention documentée.
+> ✅ **Implémenté le 18/08/2026** — `src/chunking.py`. CLI :
+> `python src/chunking.py --pdf <recueil.pdf> --out data/processed/corpus_chunks.json
+> [--texte-ordonne data/processed/corpus_legal_texte_ordonne.txt]`
 
-### Pourquoi découper (chunking) ?
+### Problème d'extraction résolu : le PDF 2 colonnes est désordonné
 
-Un LLM (et un index de vecteurs) ne peut pas manipuler un texte entier de 829 876 caractères
-en une seule fois. On découpe le corpus en **morceaux** (chunks) qui seront transformés en
-vecteurs puis indexés.
+`page.get_text()` renvoie les blocs dans l'ordre du flux du fichier, ce qui **intercale les
+colonnes** (ex. numéros d'articles 4, 3, 2 au lieu de 2, 3, 4). `extraire_texte_ordonne`
+ré-extrait donc par **blocs triés sur leurs coordonnées** : `(round(y/12), x)` (y tolère le
+gras/l'alignement bas, x ordonne les colonnes gauche→droite). Résultat : 126 → 12 baisses
+de numérotation, toutes expliquées par un redémarrage entre deux textes.
 
-### Pourquoi par article et pas par nombre fixe de caractères ?
+### Normalisation des glyphes
+
+Le PDF utilise des **ligatures** (ﬁ, ﬀ, ﬂ…) et **apostrophes/guillemets courbes** (`’`, `“`).
+`normaliser_ligatures` les remplace par leurs formes ASCII → les motifs de recherche et les
+futurs embeddings ne sont pas faussés.
+
+### Découpage par article
+
+- détection `Article (premier|1er|N) [:;]? …` (l'abréviation `Art.` du décret redevance est
+  gérée) ;
+- un article court dont le **corps est sur la ligne de l'en-tête** est promu (texte = intitulé) ;
+- artéfacts retirés : en-têtes de page répétés (`DIRECTIVE N° 04/2005…`), `er`/`ER` (vestiges
+  de « 1er »), numéros de page, `TITRE`/`CHAPITRE`.
+
+**Pourquoi découper (chunking) ?**
+
+Un LLM (et un index de vecteurs) ne peut pas manipuler un texte entier en une seule fois. On
+découpe le corpus en **morceaux** (chunks) qui seront transformés en vecteurs puis indexés.
+
+**Pourquoi par article et pas par nombre fixe de caractères ?**
 
 Décision documentée dans `PROGRESS.md` : **le chunking se fera par article de loi**, pas par
 taille de texte fixe. Raison (reconstruite) :
@@ -763,33 +788,62 @@ taille de texte fixe. Raison (reconstruite) :
 - le retrieval produit un **contexte juridique « propre »** : un article entier est plus
   utile et plus **citable** (la citation « article X » a un sens) qu'un fragment tronqué.
 
+### Attribution documentaire
+
+Les resets de numérotation bornent les **segments** (un par texte, ordre = ordre du recueil).
+Le i-ème segment reçoit le i-ème document de `DOCUMENTS` (attribution ordinale) ; chaque
+motif sert de **contrôle** (avertissement si absent). Résultat : **14 documents / 647 articles**,
+zéro « inconnu ».
+
 ---
 
 ## 18. Embeddings
 
-> ⏳ **Non implémenté — prévu en J2.**
+> ✅ **Implémenté le 18/08/2026 (code) — modèle local à finaliser** dans `src/embeddings.py`.
 
-Un **embedding** est une transformation d'un texte en **vecteur de nombres** (liste de
-flottants) qui capture son sens. Deux textes proches sur le plan sémantique produisent des
-vecteurs proches (mesure de similarité). Concrètement (intention) :
+Un **embedding** transforme un texte en **vecteur de nombres** (liste de flottants) qui
+capture son sens. Deux textes proches sur le plan sémantique produisent des vecteurs proches
+(mesure de similarité). Concrètement :
 
-- on enverra chaque chunk d'article au modèle d'embedding choisi ;
-- on stockera le texte + son vecteur dans l'index FAISS.
+- on envoie chaque chunk d'article (`corpus_chunks.json`) au modèle d'embedding ;
+- on stocke le texte + son vecteur dans l'index FAISS (`src/index_rag.py`).
 
-> **Information non déterminée dans l'état actuel du projet** : le modèle d'embedding précis
-> (fournisseur, dimension) n'est pas encore choisi. (Proposition par défaut non validée :
-> un modèle de type `text-embedding-*` ou un modèle open-source local — à trancher en J2.)
+**Modèle choisi** : `paraphrase-multilingual-MiniLM-L12-v2` (`sentence-transformers`,
+**384 dims, multilingue FR inclus, ~470 MB, local et gratuit**). Ce n'est **pas** le modèle
+de génération Ollama `qwen3.6:27b` (il est réservé au chat RAG) — les embeddings n'ont donc
+**pas** besoin d'attendre son téléchargement.
+
+**Interface pluggable** (`creer_embedder`, même contrat `embeddings(liste) -> matrice`) :
+`local` (sentence-transformers, défaut), `ollama` (`nomic-embed-text`), `mock`
+(vecteurs déterministes, tests rapides sans modèle).
+
+> **État réel au 18/08** : code écrit et **testé en mock** sur le corpus réel (647 chunks,
+> test d'intégration `test_integration_corpus_reel_mock`). L'installation du vrai modèle
+> (`pip install faiss-cpu numpy`, puis 1er appel qui téléchargera les ~470 MB + torch)
+> est **en attente de bande-passante** (le téléchargement Ollama ~17 GB sature la
+> connexion) — voir §36.8.
 
 ---
 
 ## 19. FAISS
 
-> ⏳ **Non implémenté — prévu en J2.**
+> ✅ **Implémenté le 18/08/2026 (code + tests)** dans `src/index_rag.py` (IndexFlatIP).
 
 **FAISS** = bibliothèque open-source de **recherche de similarité dans les vecteurs**
 (développée par Meta). On l'utilise **en local** (aucune base de vecteurs cloud) pour :
 ajouter tous les vecteurs de chunks, puis, à la question, retrouver les **k chunks les plus
-proches** (similarité de cosinus ou distance L2).
+proches** (similarité de cosinus — vecteurs normalisés + `IndexFlatIP`).
+
+**Stockage par l'index** (`IndexRAG`), répertoire `data/processed/faiss/` :
+`index.faiss` (binaire) + `meta.json` (métadonnées des chunks, même ordre) + `config.json`
+(backend, modèle, dim, nb de chunks).
+
+**Recherche** : `IndexRAG.rechercher(question, k)` → chunks les plus proches avec `score`
+de similarité + métadonnées (`document`, `article`, `titre`, `texte`).
+
+**Usage CLI** :
+`python src/index_rag.py build --chunks data/processed/corpus_chunks.json --backend local`
+puis `python src/index_rag.py query --dir data/processed/faiss/ --query "seuils de passation" -k 5`.
 
 **Pourquoi FAISS local plutôt qu'une vector database cloud ?** Voir [Décisions techniques](#38-décisions-techniques)
 et [Alternatives rejetées](#39-alternatives-rejetées) : volume faible, coût, apprentissage,
@@ -873,8 +927,10 @@ corpus réel), on compare donc la *qualité modèle*, pas la *qualité RAG*.
 | Google | `gemini-3.5-flash` | gratuit, clé AI Studio | **20 req/jour** (quota free tier constaté en réel le 17/08 ; variable selon compte/région) | candidat principal ; quota journalier faible — à surveiller |
 | Groq | `openai/gpt-oss-120b` | gratuit, sans CB, API OpenAI-compatible | ~30 RPM / 14 400 RPD | modèle 120B open-weight ; remplace le retiré de Groq `deepseek-r1-distill-70b` (404 vérifié en réel le 17/08) |
 
-**Ollama local** (modèle choix libre comme `qwen3:8b`) : prévu mais **désactivé par défaut**
-dans le notebook (utilisateur sur data mobile limitée). Section commentée à activer manuellement.
+**Ollama local** : modèle retenu le 18/08/2026 = **`llama3.2:1b`** (1.3 GB,
+`qwen3.6:27b` ~17 GB retiré pour libérer le disque), prévu pour la **génération des
+features** (résumé / checklist / chat). Section du notebook benchmark commentée ; à
+activer pour mesurer la qualité réelle (1B attendu moyen).
 
 **Protocole (7 critères)** : 1) fidélité au contexte / grounding ; 2) citations d'articles
 exactes ; 3) qualité du français / jargon marché ; 4) latence ; 5) coût réel par requête ;
@@ -1290,9 +1346,38 @@ Test scraping ✅ → Test extraction ✅ → Test stockage ✅ → Test ingesti
 
 ### Scénario 3 — « Le RAG récupère de mauvais articles »
 
-> ⏳ À traiter en J2/J3 une fois le RAG implémenté. Pistes : qualité du chunking (par
-> article), modèle d'embedding inadapté, mesure de similarité, présence de texte dupliqué
-> (table des matières / sommaire du Recueil).
+Pistes (↓ ordre des plus probables) :
+
+1. **Le rang renvoyé en `mock` n'est PAS sémantique** (vecteurs par hash) : si vous testez
+   `--backend mock`, le top-k est aléatoire — c'est normal. Utiliser `--backend local` pour
+   des résultats réels.
+2. **Modèle d'embedding inadapté** : `paraphrase-multilingual-MiniLM-L12-v2` (par défaut)
+   est multilingue ; si la requête/les chunks sont trop spécialisés (acronymes ARCOP/DNCCP),
+   tester un autre modèle ou `--backend ollama` (`nomic-embed-text`).
+3. **Texte dupliqué** : la table des matières / les en-têtes de page répétés du Recueil
+   peuvent polluer les chunks voisins — vérifier le chunk retourné dans `meta.json`.
+4. **Mesure de similarité** : l'index normalise les vecteurs avant `IndexFlatIP` ⇒
+   similarité de cosinus. Vérifier que les vecteurs du requêteur sont aussi normalisés
+   (cas `rechercher`).
+5. **Qualité du chunking** : si un article est tronqué ou fusionné (voir §17), les chunks
+   fautifs ramènent de faux positifs. Relancer `src/chunking.py`.
+
+Diagnostic : `python src/index_rag.py query --dir data/processed/faiss/ --query "…" -k 5`
+et inspecter le score (≈1 = très proche ; score faible = sauf pertinence).
+
+### Scénario 3bis — « faiss / numpy / sentence-transformers introuvables (ModuleNotFoundError) »
+
+Apparues au 18/08/2026 avec l'implémentation des embeddings :
+
+1. **Gamme de tailles** : faiss-cpu, numpy sont petits (~30 MB au total) ; torch +
+   sentence-transformers sont gros (~1-2 GB). Les installer séparement :
+   `.venv\Scripts\python -m pip install faiss-cpu numpy` (rapide) puis, quand la
+   bande-passante est libre, `.venv\Scripts\python -m pip install sentence-transformers`.
+2. **Bande-passante saturée** : le téléchargement d'un modèle Ollama (~17 GB) écrase la
+   connexion (~15 kB/s vers PyPI constaté le 18/08). Attendre la fin ou mettre Ollama en
+   pause (`ollama stop`) avant le gros install.
+3. **Index CRÉÉ EN MOCK en attendant** : `--backend mock` construit et teste l'index sans
+   torch → permet de valider toute la chaîne tout de suite (test d'intégration).
 
 ### Scénario 4 — « Le LLM répond sans citer correctement le corpus »
 
@@ -1370,6 +1455,102 @@ Test scraping ✅ → Test extraction ✅ → Test stockage ✅ → Test ingesti
 - **Amélioration proposée — non implémentée actuellement** : ajouter un test exercant le
   fallback cards sans table.
 
+### Difficulté 9 — `deepseek-r1-distill-70b` retiré de Groq (modèle 404)
+
+- **Problème (confirmé par exécution réelle)** : le modèle initialement prévu comme
+  challenger Groq (`deepseek-r1-distill-70b`) renvoie un **404** : il n'est plus servi par
+  Groq.
+- **Pourquoi** : la liste **réelle** des modèles Groq (interrogée le 17/08/2026) ne contient
+  plus cette réplique distillée de DeepSeek.
+- **Solution** : remplacement par `openai/gpt-oss-120b` (modèle 120B open-weight, gratuit,
+  API OpenAI-compatible) — **validé par l'utilisateur le 17/08/2026** ; le choix a été
+  porté dans le catalogue (`MODELS_CATALOG`), le notebook (§1.1 + cellule coût), `.env.example`
+  et la doc.
+- **Leçon** : toujours **vérifier la disponibilité réelle** d'un modèle fournisseur avant de
+  le figer dans la configuration (la doc marketing peut être obsolète).
+
+### Difficulté 10 — Quota Gemini free tier réel : 20 req/jour (pas 1 500 RPD)
+
+- **Problème** : au moment de l'exécution réelle (17/08), Gemini renvoie
+  `429 RESOURCE_EXHAUSTED … quotaValue: 20, model: gemini-3.5-flash … retry in 10.06s`.
+- **Écart constaté** : les **1 500 requêtes/jour** documentées ne s'appliquent pas au compte
+  réel — le quota effectif est de **20 requêtes/jour par modèle et par projet** (réinitialisation
+  à minuit heure du Pacifique).
+- **Impact** : 7 réponses Gemini + le juge Gemini indisponibles ce jour-là ; la note finale
+  pondérée mélangeait réel + simulé + juge absent (langue/conformité/format = -1).
+- **Solution** : 
+  1. **Retry 429 ajoutée** dans `call_model` (`retry_429=3`, backoff 8 s/16 s/32 s) pour
+     absorber les quotas transitoires ;
+  2. **documentation corrigée** (catalogue, notebook §1.1, `Documentation.md`) : quota réel = 20/jour,
+     variable selon compte ;
+  3. exécution partielle réussie : **Groq 7/7 OK** (~1-6 s/req) ; Gemini différé à la réinit.
+- **Leçon** : le quota réel prime sur la doc commerciale ; documenter la **valeur constatée**
+  plutôt que la valeur théorique.
+
+### Difficulté 11 — Kernel notebook par défaut sans les SDK (`ModuleNotFoundError: openai`)
+
+- **Problème** : `nbconvert` sur `notebooks/benchmark_llm.ipynb` échoue avec
+  `ModuleNotFoundError: No module named 'openai'`.
+- **Cause racine** : le kernel `python3` par défaut pointe vers le **Python 3.11 système**,
+  alors que les SDK (`openai`, `google-genai`, `ollama`) sont installés dans le **venv**
+  (Python 3.13.9).
+- **Solution** : création d'un kernel dédié **`benchllm`** (ipykernel installé dans le venv)
+  et kernelspec du notebook mis à jour → le notebook tourne désormais réellement dans le bon
+  environnement.
+- **Leçon** : un notebook ne tourne pas avec « Python » abstrait : il faut vérifier **quel
+  kernel** est sélectionné et par quel Python il est servi.
+
+### Difficulté 12 — Juge LLM « indisponible » malgré des clés présentes
+
+- **Problème** : exécution réelle → pour Gemini ET Groq, le **juge LLM** renvoie des scores `-1`
+  (langue/conformité/format non attribués), ce qui fausse la note finale.
+- **Cause racine** : le choix du juge se faisait sur la **présence de la clé**
+  (`KEYS.get("gemini")`), pas sur la **disponibilité réelle**. Clé Gemini présente dans `.env`
+  mais quota (Difficulté 10) épuisé → `JUGE = "gemini"` → tous les appels juge échouent en 429.
+- **Solution** : dans la cellule 4 du notebook, le choix du juge passe par un **micro-appel de
+  test** (`max_output_tokens=5, retry_429=0`) sur Gemini puis, en secours, sur Groq. Premier
+  candidat qui répond → `JUGE`. Bascule automatique si Gemini est en quota.
+- **Compromis assumé** : juger Groq avec Groq = **auto-évaluation partielle** (biais possible),
+  acceptable par défaut, **à contre-valider par l'échantillon manuel** (§5 du notebook).
+- **Leçon** : la *présence d'une clé* ne garantit pas la *disponibilité du service* — tester,
+  au moins par un micro-appel, avant de figer une dépendance au runtime.
+
+### Difficulté 13 — Clés API réelles collées par erreur dans `.env.example` (versionné)
+
+- **Problème (sécurité)** : les vraies clés Gemini/Groq ont transité dans `.env.example`, qui
+  est **versionné** par Git.
+- **Solution** : purge immédiate (`.env.example` remis à **clés vides**) ; aucune fuite
+  constatée dans git/historique/notebook. `.env` réel (gitignoré) reste le seul dépôt des
+  secrets. **Recommandation** : révoquer/régénérer les clés exposées par précaution.
+- **Leçon** : un fichier `.env.example` versionné doit toujours contenir des **valeurs vides** ;
+  ne jamais y coller de secret « pour tester ».
+
+### Difficulté 14 — Contrainte disque : modèle local gros vs espace limité
+
+- **Problème** : l'utilisateur n'a plus que **~30 GB** de disque libre ; les modèles LLM locaux
+  pèsent plusieurs Go.
+- **Choix** : décision revue le 18/08/2026 → **`llama3.2:1b`** (1.3 GB, Apache 2.0) pour la
+  génération des features ; **`qwen3.6:27b`** (~17 GB) retiré sans avoir servi (le RAG utilise
+  son propre modèle d'embedding local, pas un LLM de génération).
+- **Compromis** : la version maison `qwen3:8b` (plus légère) cède la place à `qwen3.6:27b`
+  (meilleure qualité, plus lourd) ; la contrainte disque impose **qu'un seul gros modèle
+  local vive à la fois**.
+- **Leçon** : anticiper l'espace disque avant tout téléchargement de poids (`ollama pull`
+  ~17 GB) et prévoir la **désinstallation** une fois le besoin couvert.
+
+### Difficulté 15 — Bande-passante saturée par le gros téléchargement (pip bloqué)
+
+- **Problème** (18/08/2026) : pendant le `ollama pull qwen3.6:27b` (~17 GB), toute
+  installation pip est **extrêmement lente** (PyPI téléchargé à ~15 kB/s constaté) ou
+  bloquée (timeout), même pour des petits paquets (faiss-cpu/numpy).
+- **Solution** : ne pas installer les gros paquets (torch, sentence-transformers) pendant le
+  téléchargement ; installer les **petits** paquets avec un **long timeout**
+  (`pip install --no-input` + timeout d'exécution ≥ 15 min) ; mettre Ollama en pause si
+  nécessaire.
+- **Leçon** : la bande-passante est une ressource partagée : **un seul gros téléchargement
+  à la fois** ; prioriser selon le chemin critique (le LLM RAG attend Ollama, les embeddings
+  locaux pèsent moins).
+
 ---
 
 ## 38. Décisions techniques
@@ -1406,6 +1587,35 @@ Test scraping ✅ → Test extraction ✅ → Test stockage ✅ → Test ingesti
   articles).
 - **Quand reconsidérer** : si le PDF ne permet pas une détection fiable des articles, un
   découpage hybride (par article, sinon par paragraphe) pourrait être nécessaire.
+
+### 38.2bis Ré-extraction ordonnée du PDF (correction du désordre 2 colonnes)
+
+- **Décision** : pour le chunking, **ré-extraire le PDF par blocs triés sur leurs
+  coordonnées** (`round(y/12), x`) plutôt qu'utiliser l'extraction existante.
+- **Problème** : `page.get_text()` suit l'ordre du flux du PDF 2 colonnes, ce qui intercale
+  les articles (126 baisses de numérotation constatées vs 12 attendues).
+- **Contraintes** : l'ordre logique des articles conditionne la qualité du chunking et des
+  citations.
+- **Analyse** : le tri par `(y, x)` rétablit l'ordre de lecture gauche→droite, haut→bas ;
+  les 12 baisses restantes correspondent toutes à des resets entre deux textes.
+- **Décision finale** : ré-extraction par coordonnées dans `src/chunking.py`
+  (`extraire_texte_ordonne`), + normalisation des ligatures/apostrophes du PDF.
+- **Compromis** : dépend de la précision du tri (arrondi sur y).
+- **Quand reconsidérer** : si un autre corpus a une mise en page différente (3 colonnes,
+  tableaux), affiner le tri ou utiliser `get_text("dict")`.
+
+### 38.2ter Attribution documentaire par ordinalité + contrôle par motif
+
+- **Décision** : le i-ème segment (borné par les resets de numérotation) reçoit le i-ème
+  document de la table `DOCUMENTS` ; un **motif** (phrases de l'article 1) n'est utilisé
+  que comme contrôle.
+- **Problème** : l'attribution par motifs est fragile (doubles espaces, apostrophes
+  courbes, phrases partagées : « Aux termes du présent décret » dans deux textes).
+- **Analyse** : l'ordre de lecture du recueil est déterministe et vérifiable sur le contenu
+  (14 segments = 14 documents).
+- **Décision finale** : ordinal + motif en avertissement.
+- **Compromis** : ordre du fichier = ordre de la table : si on réordonne le recueil, il
+  faut réordonner `DOCUMENTS`.
 
 ### 38.3 FAISS local, pas de vector database cloud
 
@@ -1638,11 +1848,11 @@ l'index FAISS, choix du hébergement de l'interface.
 
 | Statut | Éléments |
 |---|---|
-| **Fonctionnel** | Ingestion (3 scrapers + fixtures + classification), téléchargement idempotent, extraction texte + champs + placeholders, stockage SQLite (3 bases), 26 tests. **Benchmark LLM** : noyau + notebook (exécutable, mode trace validé), jeu d'évaluation 7 questions, `.env.example` |
-| **En cours** | Suite J1 : parsing des pages de détail des AO (`url_detail`) et extraction PDF des AO en cours (tâche explicitement en suspens dans PROGRESS.md). Benchmark LLM : **résultats réels en attente de clés API utilisateur** |
-| **À tester** | (rien de bloquant côté couches 1–2 ; les sélecteurs ont été validés en réel le 16/08) ; les étapes embeddings/retrieval/génération/UI sont **À VALIDER** à partir de J2 ; benchmark LLM en **mode réel** (clés) |
-| **Bloqué** | Rien n'est bloqué à ce jour (le benchmark tourne en mode trace sans clé) |
-| **À faire** | J2 : corpus RAG — chunking par article du Recueil ARCOP 2024, embeddings, FAISS local ; J3 : features LLM ; J4 : interface + rigueur ; J5 : marge |
+| **Fonctionnel** | Ingestion (3 scrapers + fixtures + classification), téléchargement idempotent, extraction texte + champs + placeholders, stockage SQLite (3 bases), 44 tests (chunking + embeddings/FAISS inclus). **Benchmark LLM** : noyau + notebook, jeu 7 questions, `.env.example`. **Chunking corpus RAG** : `src/chunking.py` + `corpus_chunks.json` (647 articles / 14 textes). **Embeddings + FAISS** : `src/embeddings.py` + `src/index_rag.py` (chaîne validée en mock sur le corpus réel) |
+| **En cours** | Suite J1 : parsing des pages de détail des AO (`url_detail`) et extraction PDF des AO en cours. Benchmark LLM : **résultats réels en attente de clés API utilisateur**. J2 : **vrai modèle d'embedding** (sentence-transformers) en attente de bande-passante pour torch + génération du répertoire d'index `data/processed/faiss/` |
+| **À tester** | le **rang sémantique réel des recherche** avec `--backend local` (le rang en mock n'est pas sémantique) ; les étapes retrieval/génération/UI à partir de J2/J3 ; benchmark LLM en **mode réel** (clés) |
+| **Bloqué** | Chunking + index FAISS (mock) OK — **embedding local réel** en attente : torch/sentence-transformers se téléchargent trop lentement pendant `ollama pull` (~15 kB/s constaté) ; Ollama `qwen3.6:27b` en cours (> 2 h) |
+| **À faire** | J2 : corpus RAG — **installer sentence-transformers, builder `--backend local`** (chunking + FAISS déjà faits) ; J3 : features LLM ; J4 : interface + rigueur ; J5 : marge |
 | **Risques** | voir §43 |
 | **Décisions ouvertes** | Modèle d'embedding (J2) ; **choix du fournisseur LLM via benchmark (§22.1)** ; hébergement de l'interface ; choix du plan B corpus si l'URL du Recueil change |
 
@@ -1652,11 +1862,11 @@ l'index FAISS, choix du hébergement de l'interface.
 
 Planning documenté (`PROGRESS.md`) et **évolution constatée** :
 
-| Jour | Prévu | État réel au 16/08/2026 |
+| Jour | Prévu | État réel au 18/08/2026 |
 |---|---|---|
 | J1 (16/08) | Ingestion + extraction | **Réalisé** (avec un bonus : pivot dossiers-types, en plus des AO) |
-| J2 (17/08) | Corpus RAG : chunking par article, embeddings, FAISS local | À venir (le texte du Recueil est déjà extrait → prêt pour le chunking) |
-| J3 (18/08) | Fonctionnalités LLM : résumé, checklist éligibilité, Q&A | À venir |
+| J2 (17/08) | Corpus RAG : chunking par article, embeddings, FAISS local | **Chunking réalisé (18/08, 647 articles / 14 textes)** ; embeddings + FAISS **codés et testés en mock** (vrai modèle en attente de bande-passante) |
+| J3 (18/08) | Fonctionnalités LLM : résumé, checklist éligibilité, Q&A | À venir (assise RAG à finaliser en J2) |
 | J4 (19/08) | Interface Streamlit + rigueur (test de bout en bout) | À venir |
 | J5 (20/08) | Marge | À venir |
 

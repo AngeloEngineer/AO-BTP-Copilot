@@ -71,6 +71,16 @@ MODELS_CATALOG: dict[str, dict] = {
         "note": "Challenger Groq validé par l'utilisateur le 17/08/2026 (deepseek-r1-distill-70b "
                 "retiré de Groq — 404 vérifié en réel). API compatible OpenAI.",
     },
+    "ollama": {
+        "fournisseur": "ollama",
+        "modele": "llama3.2:1b",
+        "prix_in_par_million": 0.0,  # local, gratuit
+        "prix_out_par_million": 0.0,
+        "gratuit": True,
+        "note": "Modèle Ollama léger local retenu pour les features (J3). "
+                "`qwen3.6:27b` retiré (disque) ; `llama3.2:1b` installé (1.3 GB). "
+                "Qualité attendue limitée (1B) — à confirmer par le benchmark en réel.",
+    },
 }
 
 
@@ -147,7 +157,7 @@ def call_model(provider_id: str, system: str, user: str,
             elif provider_id == "ollama":
                 client = build_ollama_client()
                 resp = client.chat(
-                    model=MODELS_CATALOG.get(provider_id, {}).get("modele", "qwen3:8b"),
+                    model=MODELS_CATALOG.get(provider_id, {}).get("modele", "llama3.2:1b"),
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
                     options={"num_predict": max_output_tokens},
