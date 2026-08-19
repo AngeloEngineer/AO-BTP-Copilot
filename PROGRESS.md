@@ -310,7 +310,10 @@ sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pa
    (1,26 Mo encodé), 647 meta, 9 consultations
 - [x] **README global du projet** rédigé (architecture, quickstart, options de déploiement
    à jour avec la politique HF)
-- [ ] (en cours) vérification parity Node : embeddings JS vs Python + ordre top-k
+- [x] **PARITY NODE VALIDÉE (20/08)** : `@huggingface/transformers@3` + onnxruntime-node
+   (temp) vs sentence-transformers + FAISS — mêmes 3 questions → **cosinus JS/Python =
+   1,0000**, **top-5 identiques, même ordre (τ=1.00), mêmes scores**. Le retrieval de la
+   démo navigateur == backend FAISS (les embeddings JS répliquent pooling mean + L2).
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir
