@@ -4,13 +4,53 @@ Le chatbot est conteneurisé en 3 services : **ollama** (modèle `llama3.2:1b`),
 **preload** (télécharge le modèle au premier démarrage, puis s'arrête) et **app**
 (FastAPI + SPA React, port **8000**).
 
+> ✅ **Arm64 (ARM) supporté** : les images `python:3.12-slim`, `ollama/ollama`,
+> `sentence-transformers` et les wheels PyPI `faiss-cpu` (aarch64, cf. 1.15.0) sont
+> disponibles pour les instances ARM comme **Oracle Always Free**.
+
 ## Prérequis serveur (recommandé)
 
-- VPS Linux (Debian/Ubuntu), **2 vCPU / 4 Go RAM**, ≥ 10 Go de disque libre.
+- VPS Linux (Debian/Ubuntu), **2 vCPU / 4 Go RAM**, ≥ 10 Go de disque libre
+  (x86 **ou** ARM).
 - Docker + plugin Compose : `sudo apt install docker.io docker-compose-v2` (ou la
   méthode officielle Docker).
 - Accès réseau sortant (téléchargement des images, des poids LLM et du modèle
   d'embedding au 1er chat).
+
+## Oracle Cloud Always Free — mise en route (gratuit pour toujours)
+
+1. **Créer le compte** sur https://cloud.oracle.com → « Oracle Cloud Free Tier »
+   (carte bancaire demandée **pour la vérification d'identité, sans débit**).
+2. **Créer une instance** :
+   - Image : **Ubuntu 24.04** (Minimal), **Architecture = ARM** ;
+   - Shape : **VM.Standard.A1.Flex** (Ampere), **4 OCPU / 24 Go RAM** (Always Free) ;
+   - Boot volume : ~50 Go (inclus dans le quota gratuit ~200 Go) ;
+   - Clé SSH : coller ta **clé publique** (sinon en générer une depuis la console).
+3. **Ouvrir le port 8000** :
+   - VCN → *Security Lists* → *Default Security List* → « Add Ingress Rule » :
+     Source `0.0.0.0/0`, protocole **TCP**, destination **8000**.
+4. Se connecter :
+   ```bash
+   ssh -i <ta-cle-privee> ubuntu@<IP-publique>
+   ```
+   puis installer Docker :
+   ```bash
+   sudo apt update && sudo apt install -y docker.io docker-buildx docker-compose-v2
+   sudo usermod -aG docker $USER
+   ```
+   déconnexion/reconnexion pour activer le groupe `docker`, puis continuer avec la
+   section [Mise en place](#mise-en-place-une-fois).
+
+> **Index FAISS et architecture** : l'index actuel a été construit en local (x86).
+> Si `app` échoue à le charger sur ARM (« portability trap » rare), le reconstruire
+> sur le serveur en une commande (le conteneur inclut l'embedding local) :
+> ```bash
+> docker compose run --rm --no-deps app \
+>   python src/index_rag.py build \
+>     --chunks data/processed/corpus_chunks.json \
+>     --dir data/processed/faiss --backend local
+> ```
+> (nécessite d'avoir transféré aussi `corpus_chunks.json`, voir ci-dessous.)
 
 ## Mise en place (une fois)
 
@@ -25,6 +65,7 @@ cd "AO-BTP Copilot/deploy"
 #      scp "data/processed/consultations.db" user@<IP>:"AO-BTP Copilot/deploy/data/processed/"
 #    Le dossier ./data doit contenir au minimum : processed/faiss/ et processed/consultations.db
 #    (app.db — comptes/conversations — y sera créé automatiquement).
+#    Optionnel mais conseillé pour la reconstruction ARM : ajouter processed/corpus_chunks.json
 
 # 3. Configurer les secrets
 cp .env.example .env

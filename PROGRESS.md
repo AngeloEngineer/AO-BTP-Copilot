@@ -264,6 +264,11 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
   preload llama3.2:1b + app, volume ./data:/app/data, JWT via env_file), .env.example,
   .dockerignore, README d'exploitation (VPS 2 vCPU/4 Go, transfert des données RAG, HTTPS
   Caddy) — **reste à faire** : provisionner le VPS et lancer `docker compose up -d --build`
+- [x] **Choix utilisateur : hébergement gratuit = Oracle Cloud Always Free** (instance ARM
+  Ampere A1, 4 OCPU/24 Go RAM, gratuit pour toujours). Wheels `faiss-cpu` aarch64 vérifiées
+  sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pas ajouté au
+  `deploy/README.md` (compte, instance ARM, port 8000 en Security List, Docker) + procédure
+  de reconstruction de l'index FAISS sur ARM si nécessaire
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir

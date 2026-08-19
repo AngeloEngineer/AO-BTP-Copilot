@@ -1374,6 +1374,16 @@ Le pack `deploy/` contient :
 - Le 1er démarrage complet prend ~5-15 min (images + modèle), puis `docker compose
   up -d` ressert le service en quelques secondes.
 
+**Hébergement gratuit retenu (décision utilisateur 19/08)** : **Oracle Cloud Always
+Free** (instance ARM `VM.Standard.A1.Flex`, 4 OCPU / 24 Go RAM, gratuit pour
+toujours). Le pack `deploy/` fonctionne tel quel (images Docker multi-arch ;
+wheels PyPI `faiss-cpu` **aarch64 vérifiées** — version 1.15.0, abi3 CPython 3.10+).
+Guide Oracle pas à pas dans `deploy/README.md` (création du compte, instance ARM,
+ouverture du port 8000 via Security List, installation Docker). Particularité ARM :
+si l'index FAISS local (x86) refusait de se charger, le reconstruire sur le serveur
+en une commande `docker compose run --rm --no-deps app python src/index_rag.py build
+--backend local` (asynchrone dans le README).
+
 ---
 
 ## 34. Tests
