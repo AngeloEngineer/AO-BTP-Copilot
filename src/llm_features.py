@@ -5,10 +5,11 @@ Chaque feature récupère le contexte juridique pertinent via l'index FAISS
 grounded : le modèle doit répondre UNIQUEMENT à partir du contexte fourni, en
 citant les articles (ex. « Article 12 »).
 
-Modèle par défaut : **Groq openai/gpt-oss-120b** (gratuit, citations fiables —
-verdict du benchmark réel) ; **Ollama llama3.2:1b** en repli local (hors-ligne)
-via `provider="ollama"` (cite moins bien, plus lent). Voir
-`src/llm_benchmark.py` pour le catalogue et la couche d'appels (`call_model`).
+Modèle par défaut : **Ollama local `llama3.2:1b`** (décision produit du 18/08/2026 —
+interface locale uniquement) ; Groq openai/gpt-oss-120b reste disponible dans le code
+pour comparaison en benchmark. Un modèle 1B invente parfois des références :
+`verifier_references()` (post-traitement, 100 % local) signale toute citation
+introuvable dans le corpus ARCOP 2024. Voir `src/llm_benchmark.py` pour le catalogue.
 
 Design : les fonctions de *prompt* et de *mise en forme* sont pures et testables
 sans réseau ; la génération est **injectable** (`generer`=callable, en défaut
@@ -22,12 +23,14 @@ Fonctions publiques :
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FAISS_DIR = PROJECT_ROOT / "data" / "processed" / "faiss"
 # groq : gratuit + citations fiables (benchmark réel) ; ollama : repli hors-ligne.
-PROVIDER_DEFAUT = "groq"
+PROVIDER_DEFAUT = "ollama"
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +49,11 @@ def rechercher(question: str, k: int = 6, repertoire: Path = FAISS_DIR) -> list[
     backend = resoudre_backend(repertoire)
     embedder = creer_embedder(backend)
     index = IndexRAG.charger(repertoire, embedder)
+    return index.rechercher(question, k=k)
+
+
+def rechercher_index(index, question: str, k: int = 6) -> list[dict]:
+    """Variante sur un index déjà chargé (évite de recharger le modèle d'embedding)."""
     return index.rechercher(question, k=k)
 
 
@@ -99,7 +107,10 @@ def _system_grounded(consigne: str) -> str:
         "Togo, pour une PME du BTP. Tu réponds UNIQUEMENT à partir du CONTEXTE "
         "fourni (extraits juridiques et fiche de l'appel d'offres). Si une "
         "information n'est pas dans le contexte, dis-le explicitement, n'invente "
-        "rien. Cite les articles lorsque tu t'appuies sur eux (ex. « Article 12 »).\n\n"
+        "rien. N'invente JAMAIS un décret, une loi, un arrêté, un article, un "
+        "montant, un organisme, un contact ou une URL : seule une référence "
+        "présente dans le CONTEXTE peut être citée, telle quelle. Cite les "
+        "articles lorsque tu t'appuies sur eux (ex. « Article 12 »).\n\n"
         + consigne
     )
 
@@ -193,29 +204,50 @@ def _generer(provider: str, system: str, user: str, generer=None,
     return text
 
 
-def _contexte_requetes(focus: str, k: int) -> str:
-    """Récupère le contexte RAG autour de `focus` et le met en forme."""
-    return formater_contexte(rechercher(focus, k=k))
+def intention(question: str | None) -> str:
+    """Aiguille une question vers 'resume', 'checklist' ou 'chat' (défaut)."""
+    q = (question or "").lower()
+    if any(m in q for m in ("résumé", "resume", "récapitulatif")):
+        return "resume"
+    if any(m in q for m in ("checklist", "liste de vérification", "éligibilité",
+                            "eligibilite", "conditions pour participer",
+                            "puis-je soumissionner", "puis-je participer")):
+        return "checklist"
+    return "chat"
+
+
+def _contexte_requetes(focus: str, k: int, index=None) -> str:
+    """Récupère le contexte RAG autour de `focus` et le met en forme.
+
+    `index` optionnel : un index FAISS déjà chargé (pour éviter de recharger le
+    modèle d'embedding à chaque appel — utile côté interface) ; sinon chargement
+    à la demande via `rechercher`.
+    """
+    if index is not None:
+        chunks = index.rechercher(focus, k=k)
+    else:
+        chunks = rechercher(focus, k=k)
+    return formater_contexte(chunks)
 
 
 def resumer_ao(ao: dict, k: int = 6, provider: str = PROVIDER_DEFAUT,
-               focus: str | None = None, generer=None,
+               focus: str | None = None, generer=None, index=None,
                max_output_tokens: int = 1000) -> str:
     """Résumé grounded d'un AO : objet + dispositions applicables sourcées."""
     focus = focus or f"{ao.get('titre', '') or ''} {ao.get('objet', '') or ''}".strip()
-    contexte = _contexte_requetes(focus or "appel d'offres travaux", k)
+    contexte = _contexte_requetes(focus or "appel d'offres travaux", k, index=index)
     system, user = prompt_resume(ao, contexte)
     return _generer(provider, system, user, generer,
                     max_output_tokens=max_output_tokens)
 
 
 def checklist_eligibilite(ao: dict, k: int = 8, provider: str = PROVIDER_DEFAUT,
-                          focus: str | None = None, generer=None,
+                          focus: str | None = None, generer=None, index=None,
                           max_output_tokens: int = 1000) -> str:
     """Checklist d'éligibilité sourcée (citation d'article à chaque point)."""
     focus = focus or f"{ao.get('titre', '') or ''} {ao.get('objet', '') or ''} "
     focus = (focus + "conditions de participation capacités garanties").strip()
-    contexte = _contexte_requetes(focus, k)
+    contexte = _contexte_requetes(focus, k, index=index)
     system, user = prompt_checklist(ao, contexte)
     return _generer(provider, system, user, generer,
                     max_output_tokens=max_output_tokens)
@@ -223,14 +255,90 @@ def checklist_eligibilite(ao: dict, k: int = 8, provider: str = PROVIDER_DEFAUT,
 
 def repondre_question(question: str, historique: list[dict] | None = None,
                       ao: dict | None = None, k: int = 5,
-                      provider: str = PROVIDER_DEFAUT, generer=None,
+                      provider: str = PROVIDER_DEFAUT, generer=None, index=None,
                       max_output_tokens: int = 1000) -> str:
     """Répond à une question avec contexte RAG + fiche AO + historique."""
     ao = ao or {}
     focus = f"{question} {ao.get('titre', '') or ''} {ao.get('objet', '') or ''}".strip()
-    contexte = _contexte_requetes(focus, k)
+    contexte = _contexte_requetes(focus, k, index=index)
     if ao:
         contexte = f"FICHE DE L'APPEL D'OFFRES :\n{texte_ao(ao)}\n\n" + contexte
     system, user = prompt_chat(question, historique or [], contexte)
     return _generer(provider, system, user, generer,
                     max_output_tokens=max_output_tokens)
+
+
+# ---------------------------------------------------------------------------
+# Vérification des références (garde-fou anti-hallucination, 100 % local)
+# ---------------------------------------------------------------------------
+
+_DOC_RE = re.compile(
+    r"\b(d[ée]cret|loi|arr[êe]t[ée]|directive)\s*(?:n[°ºo]?\s*\.?\s*)?"
+    r"(\d{3,4}-\d{2,4}|\d{1,4}(?:[-/]\d{1,4})?)",
+    re.IGNORECASE,
+)
+_ART_RE = re.compile(r"\barticle\s+(premier|1er|1\b|\d+)\b", re.IGNORECASE)
+
+
+def _ancrer_repertoire_corpus(repertoire: Path = FAISS_DIR) -> tuple[set[str], set[str]]:
+    """N° de textes et n° d'articles réellement présents dans le corpus (meta FAISS)."""
+    meta_path = Path(repertoire) / "meta.json"
+    numeros_textes: set[str] = set()
+    numeros_articles: set[str] = set()
+    if not meta_path.exists():
+        return numeros_textes, numeros_articles
+    chunks = json.loads(meta_path.read_text(encoding="utf-8"))
+    for c in chunks:
+        numeros_articles.add(str(c.get("article", "")).strip().upper())
+    for doc in sorted({c.get("document", "") for c in chunks if c.get("document")}):
+        # "decret-2019-096-maitrise-ouvrage" → {2019-096, 2019-96, 96} ; "0178-171"…
+        parts = [p for p in doc.split("-") if p.isdigit()]
+        numeros_textes.add("-".join(parts))
+        if "-".join(parts) not in ("01-2022", "087"):
+            numeros_textes.add("-".join(parts[1:]) if len(parts) > 2 else "-".join(parts))
+        if len(parts) >= 2:
+            numeros_textes.add("-".join(parts[1:]))
+        if parts:
+            numeros_textes.add(str(int(parts[-1])))
+    numeros_textes -= {"", "-"}
+    return numeros_textes, numeros_articles
+
+
+def verifier_references(texte: str, repertoire: Path = FAISS_DIR) -> list[str]:
+    """Signale dans `texte` les références qui n'existent PAS dans le corpus.
+
+    Détecte les mentions « décret / loi / arrêté / directive n° … » et « article
+    N », puis les confronte aux textes et articles réellement présents dans le
+    Recueil ARCOP 2024 (`meta.json` de l'index FAISS). Sert de garde-fou :
+    un modèle 1B peut inventer des références (ex. « décret n° 2019-1010 ») —
+    mieux vaut les signaler que les laisser croire exactes.
+    """
+    numeros_textes, numeros_articles = _ancrer_repertoire_corpus(repertoire)
+    if not numeros_textes:
+        return []
+    avertissements: list[str] = []
+    vus: set[str] = set()
+
+    for m in _DOC_RE.finditer(texte):
+        token = m.group(0)
+        numero = re.sub(r"[^0-9-]", "", m.group(2))  # "2019-096" / "087" / "90-02"
+        candidates = {numero}
+        for part in numero.split("-"):
+            candidates.add(part)
+        if numero.startswith("0") and len(numero) > 1:
+            candidates.add(numero.lstrip("0") or "0")
+        if not (candidates & numeros_textes) and token.lower() not in vus:
+            vus.add(token.lower())
+            avertissements.append(
+                f"Référence douteuse : « {token} » est introuvable dans le "
+                f"corpus ARCOP 2024 (vérifier avant toute utilisation)."
+            )
+
+    for m in _ART_RE.finditer(texte):
+        numero = {"premier": "1", "1er": "1", "1": "1"}.get(m.group(1), m.group(1))
+        if numero not in numeros_articles and m.group(1).upper() not in numeros_articles:
+            avertissements.append(
+                f"Référence douteuse : « Article {numero} » n'existe pas dans "
+                f"le corpus ARCOP 2024 (vérifier avant toute utilisation)."
+            )
+    return avertissements

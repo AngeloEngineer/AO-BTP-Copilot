@@ -1,3 +1,4 @@
+import json
 import types
 
 import pytest
@@ -156,11 +157,86 @@ def test_generer_injecte_stripte_le_texte(fake_retrieval):
     assert out == "OK"
 
 
+def test_index_prene_par_les_features():
+    """Un index déjà chargé (objet avec .rechercher) évite la récupération globale."""
+    class FakeIndex:
+        def rechercher(self, question, k=6):
+            return [CHUNK_SAMPLE] * k
+
+    caps = []
+    out = lf.checklist_eligibilite(
+        AO_SAMPLE, index=FakeIndex(), generer=_fake_generer_capture(caps))
+    assert out == "RÉPONSE FAKE"
+    assert "Article 12" in caps[0]["user"]  # contexte issu de l'index passé
+
+
+def test_rechercher_index_helper():
+    class FakeIndex:
+        def rechercher(self, question, k=6):
+            return [CHUNK_SAMPLE] * k
+    assert lf.rechercher_index(FakeIndex(), "question", k=2) == [CHUNK_SAMPLE] * 2
+
+
 def test_formater_contexte_multi_chunks():
     c2 = dict(CHUNK_SAMPLE, article="13", titre="Seuils")
     txt = lf.formater_contexte([CHUNK_SAMPLE, c2])
     assert txt.count("[") == 2
     assert "Article 12" in txt and "Article 13" in txt
+
+
+# --- Garde-fou anti-hallucination : vérificateur de références ----------------
+
+
+def _metarepertoire_fake(tmp_path, docs):
+    """meta.json minimal : `docs` = [{'document': str, 'article': str}, …]."""
+    meta = tmp_path / "meta.json"
+    meta.write_text(json.dumps(docs), encoding="utf-8")
+    return tmp_path
+
+
+def test_verifier_references_signale_inventees(tmp_path):
+    rep = _metarepertoire_fake(tmp_path, [
+        {"document": "decret-2022-080-code-marches-publics", "article": "27"},
+        {"document": "loi-2021-033-marches-publics", "article": "12"},
+    ])
+    av = lf.verifier_references(
+        "Le décret n° 2019-1010 exige une caution, la loi 90-02 du 4 janvier 1990 "
+        "s'y oppose, voir aussi l'article 999.",
+        repertoire=rep,
+    )
+    assert any("2019-1010" in a for a in av)
+    assert any("90-02" in a for a in av)
+    assert any("999" in a for a in av)
+
+
+def test_verifier_references_laisse_reelles_intactes(tmp_path):
+    rep = _metarepertoire_fake(tmp_path, [
+        {"document": "decret-2022-080-code-marches-publics", "article": "27"},
+        {"document": "directive-01-2022-ppp", "article": "12"},
+    ])
+    av = lf.verifier_references(
+        "Aux termes du décret 2022-080 et de la directive 01-2022, article 27 et "
+        "article 12 s'appliquent.",
+        repertoire=rep,
+    )
+    assert av == []
+
+
+def test_verifier_references_sans_reference_aucune_alerte(tmp_path):
+    rep = _metarepertoire_fake(tmp_path, [
+        {"document": "decret-2022-080-code-marches-publics", "article": "27"},
+    ])
+    assert lf.verifier_references(
+        "L'offre économiquement la plus avantageuse est retenue.", repertoire=rep,
+    ) == []
+
+
+def test_verifier_references_sur_index_reel_corpus_647():
+    av = lf.verifier_references(
+        "Conformément à la loi 2021-033 et au décret 2022-080, voir article 12.",
+        repertoire=lf.FAISS_DIR,
+    )
+    assert av == []
 
 
 if __name__ == "__main__":

@@ -179,9 +179,84 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
   loi-2021-034), chat avec citations exactes (art. 3 décret 2018-171, tableau des
   seuils) — ~15-65 s/réponse
 - [x] Tests : **69 au total, verts**
-- [ ] (J4) interface Streamlit branchée sur llm_features + latence affichée
+- [x] **Commit `b9acdf6`** « J3 features LLM : résumé, checklist éligibilité sourcée et
+  chat grounded sur le RAG réel » — 6 fichiers, 663 insertions, 69 tests verts
 - [ ] (attente quota) ré-essayer Gemini + juge LLM Gemini pour compléter la matrice
 - [ ] revue manuelle de l'échantillon (cellule 5 du notebook) et contre-échantillon
+
+### 18/08 (J4) — Interface Streamlit (style DeepSeek, Ollama local uniquement)
+- [x] streamlit 1.61.1 installé dans le venv ; skill local développer-avec-streamlit
+  chargé (layouts centré, chat-ui, performance/cache)
+- [x] Données inspectées : consultations.db (9 AO dont 3 BTP), extraction.db
+  (22 documents + 44 champs, placeholders dossiers-types), dossiers_types.db (22)
+- [x] `llm_features` : paramètre **`index=`** (rechercher_index, _contexte_requetes,
+  resumer_ao, checklist_eligibilite, repondre_question) → l'app charge l'index
+  FAISS UNE seule fois (`@st.cache_resource`) au lieu de recharger l'embedder
+  par appel — tests : 71 verts
+- [x] **Redesign complet de l'interface sur retour utilisateur** (« je veux un truc à
+  l'instar de DeepSeek, l'utilisateur vient et pose sa question ») :
+  - un seul écran de **chat** (layout centré), un seul champ de saisie en bas
+  - **détection automatique de l'intention** : question avec « résumé » → résumé ;
+  « checklist »/« éligibilité » → checklist sourcée ; sinon → chat Q&A grounded
+  - barre latérale minimale : marché concerné (ou corpus entier) + nouvelle discussion
+  - **Ollama local UNIQUEMENT** (`llama3.2:1b`) — plus aucun autre modèle dans l'app
+    (décision utilisateur explicite du 18/08, voir log des décisions)
+  - bug corrigé : v1 du bouton « Générer » ne faisait rien (incrément de variante
+    sans `st.rerun()`) → génération unifiée requête/chat ; suggestions cliquables
+    branchées sur le même chemin de génération
+  - erreurs Ollama gérées proprement (serveur arrêté / modèle absent → message clair)
+- [x] Validations réelles : chat Q&A Ollama (seuils) ≈ 154 s à froid puis grounded ;
+  pipeline app complet sur AO-2026-00009 (index 647 chunks + résumé + checklist) ;
+  `streamlit run app.py` démarre sans erreur (health 200, page servie) ; 71 tests verts
+- [x] **Challenge réel de l'app (18/08, sur demande utilisateur)** :
+  - chat Q&A grounded **fonctionne bien** (réponse avec fiche AO-2026-00009 correcte,
+    art. cités, date limite) ; piège « décret 2019-1010 » → le modèle ne valide pas
+    la fausse référence (mais réponse brouillonne)
+  - **résumé & checklist : qualité insuffisante avec llama3.2:1b** — résumé hors-sujet
+    puis trop court (« La loi de 2022-065-ppp portant modalités… »), checklist avec
+    « les informations ne sont pas réelles », emails/orgs inventés (ENIA-ACC, Loi 90-02,
+    Décret 94-117/PMRT). Le mécanisme s'exécute, mais le modèle 1B n'est pas fiable
+    pour ces deux tâches génératives
+- [x] **Garde-fou anti-hallucination local** : `lf.verifier_references()` — analyse la
+  réponse et signale toute référence (décret/loi/arrêté/directive n°…, article N)
+  **introuvable dans le corpus ARCOP 2024** (registre construit depuis `meta.json`) ;
+  affiché en `st.warning` sous chaque réponse (app.py) ; prompt `_system_grounded`
+  durci (« n'invente JAMAIS une référence »). Tests : +4 → **75 tests verts**
+- [ ] **décision en attente** : pour un résumé/checklist réellement fiables, installer
+  un modèle Ollama local plus fort (ex. qwen2.5:7b ~4,7 Go, gemma3:4b) — OK utilisateur
+  requis (contrainte disque/data, il a déjà retiré qwen3.6:27b)
+- [x] commit du bloc J4 + Étape A (voir section suivante)
+
+### 19/08 (Étape A) — Scalabilité : service web multi-utilisateur
+
+Décision utilisateur : remplacer l'interface Streamlit par un **service web** moderne ; une
+seule entreprise au stade A (« Btma Industries ») avec **plusieurs comptes employés** (email +
+mot de passe). Les sources ouest-africaines (Bénin, Côte d'Ivoire, Sénégal SYGMAP, bailleurs
+AfDB/UNGM/BM) seront alimentées en Étape B.
+
+- [x] **Backend FastAPI** (`server/`) : `main.py` (routes REST + **SSE** + service de la SPA
+  `web/dist`), `db.py` (SQLite `data/processed/app.db` : users / conversations / messages,
+  connexions courtes thread-safe, transaction sur la même connexion), `auth.py` (PBKDF2 stdlib
+  200k itérations + JWT HS256, exp. 24 h), `schemas.py` (Pydantic v2, EmailStr), `config.py`
+- [x] **Chat en streaming (SSE)** : `POST /api/conversations/{id}/messages` → `data: {json}\n\n`
+  (aiguillage résumé/checklist/chat ; introduction sans appel modèle si marché absent ;
+  sinon génération Ollama `llama3.2:1b` streamée `num_predict=1000`)
+- [x] **Frontend React/Vite/Tailwind** (`web/`) : AuthPage (connexion/inscription), Chat à la
+  DeepSeek — sidebar conversations + marché, streaming SSE progressif, rendu Markdown,
+  avertissements `verifier_references` sous chaque réponse ; `web/dist` servi par FastAPI (SPA
+  fallback) ; dev Vite 5173 avec proxy `/api` → 8000
+- [x] **E2E backend sur données réelles** : register 201 / doublon 409, login 200 / mauvais mdp
+  401, me, 9 consultations, création conversation + renommage, introduction SSE ~0,3 s sans
+  Ollama, chat réel **805 fragments en 143 s**, conversation persistée
+  `[user, assistant, user, assistant]`, titre auto sur le premier message
+- [x] **E2E frontend** : build Vite OK (287 modules), SPA 200 à `/`, routes profondes →
+  index.html, `/api/meta` intact à côté
+- [x] **Tests** : `tests/test_server.py` (auth, cycle utilisateur/conversation/messages,
+  propriété du renommage, aiguillage prompts via index simulé, historique borné) → **86 verts**
+- [x] `requirements.txt` : + fastapi, uvicorn, pyjwt, email-validator ; `pytest.ini` :
+  `pythonpath = src server`
+- [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
+
 ### 20/08 (J5) — Marge — à venir
 
 ## Décisions techniques (log cumulatif)
@@ -202,24 +277,39 @@ session live : lancer le scraper une fois pour de vrai, ajuster les sélecteurs 
 - Scoring mixte : **juge LLM** (modèle non concurrent) + **échantillon manuel** de
   l'utilisateur (pas de full-auto ni de full-manuel)
 - Clés API : jamais commitées ; `.env` ignoré, `.env.example` versionné comme gabarit
+- **Interface (décision utilisateur 18/08, SUPERSEDE)** : le produit n'utilisera **que
+  Ollama local (`llama3.2:1b`)** — « on n'utilise pas un autre modèle que celui de
+  Ollama téléchargé en local ». `PROVIDER_DEFAUT = "ollama"` dans `llm_features.py` ;
+  l'app `app.py` ne référence aucun autre modèle. Groq/Gemini restent disponibles dans
+  le code (benchmark, comparaison qualité) mais **ne sont plus un défaut produit**.
+  Qualité assumée : le 1B cite parfois des articles inexacts (cit=0 au benchmark) —
+  compensé par des prompts grounded stricts ; à améliorer (modèle local plus fort)
+  si la machine le permet.
 - Ollama : **modèle de génération local retenu : `llama3.2:1b`** (1.3 GB, installé le
   18/08/2026) ; `qwen3.6:27b` (17 GB) retiré pour libérer le disque. Section notebook
   benchmark commentée → à activer pour le benchmark réel d'Ollama
 - PDF 2 colonnes : **ré-extraction par coordonnées** plutôt qu'utiliser le flux du fichier
   (l'ordre du flux intercale les colonnes → 126 vs 12 baisses de numérotation)
+- **Étape A (19/08, décision utilisateur)** : le produit évolue d'une app mono-poste Streamlit
+  vers un **service web multi-utilisateur** — une entreprise (« Btma Industries »), plusieurs
+  comptes employés (email + mot de passe, JWT). Frontend **React + Vite + Tailwind** (pas de
+  Streamlit pour le produit final). RAG toujours 100 % local (Ollama `llama3.2:1b`, index FAISS
+  local). Étape B à venir : multipays (Togo+BOAD, Bénin, Côte d'Ivoire, Sénégal) + bailleurs
+  (AfDB/UNGM/BM), schéma commun et index RAG par pays
+- **SSE plutôt que WebSocket** pour le streaming : un seul sens (la réponse du modèle), plus
+  simple, compatible proxy Vite et clients HTTP standards ; format `data: {json}\n\n`
+- `app.db` **séparé** des bases d'ingestion (consultations/extraction/dossiers_types) → base
+  application remplaçable par Postgres au scale-out sans toucher aux scrapers
 
 ## Prochaine session
 
-Priorité (J3 fini → J4 — interface, RAG complet + features codées) :
-1. **(décision produit enclenche J4)** modèle par défaut des features : Ollama
-   `llama3.2:1b` est lent (~2 min/résumé k=3) et **cite des articles inexacts**
-   (benchmark réel 18/08 : cit=0 partout, halo « Décret 2019-1010 ») ; **Groq
-   gpt-oss-120b** (gratuit) est fiable (7/7, citations exactes) mais nécessite
-   réseau. Recommandation : défaut = groq, `--provider ollama` en repli offline.
-2. **Interface Streamlit** (J4) : liste des AO (consultations.db), fiche détail
-   (champs extraits), onglets Résumé / Checklist éligibilité / Chat Q&A — tous
-   branchés sur `llm_features.py`, avec indicateur de durée d'appel.
-3. Committer le bloc J3 (llm_features, benchmark_ollama_reel, scoring corrigé,
-   tests, PROGRESS/Documentation).
-4. (attente quota) ré-essayer Gemini + juge LLM pour compléter la matrice benchmark.
-5. Revue manuelle de l'échantillon (cellule 5 du notebook) / contre-échantillon.
+Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel et testé de bout en
+bout. Priorités :
+1. **Tests utilisateur du service web** : `uvicorn server.main:app` sur 8000 → ouvrir
+   http://localhost:8000 (ou Vite 5173 en dev), créer un compte, poser une question, vérifier
+   le streaming et les avertissements (1er appel ~2-4 min à froid avec llama3.2:1b)
+2. Committer l'Étape A (rien n'est encore commité : server/, web/, app.py, tests)
+3. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
+   bande-passante/disque disponibles
+4. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun
+   OCDS-like + index RAG par pays

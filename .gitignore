@@ -26,3 +26,7 @@ data/raw/
 .env
 .env.*
 !.env.example
+
+# Frontend web (Étape A)
+web/node_modules/
+web/dist/

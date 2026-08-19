@@ -969,14 +969,18 @@ attendue / contraintes / risques / exemple. **Cette section est un TODO de maint
 
 ## 24. Résumé des appels d'offres
 
-> ⏳ **Non implémenté (J3 prévu).** Génération d'un résumé synthétique par AO, ancré sur les
-> champs extraits et, le cas échéant, le texte du document.
+> ✅ **Implémenté (J3) — `src/llm_features.py` → `resumer_ao()`.** Résumé synthétique d'un AO,
+> ancré sur la **fiche extraite** (titre/objet/champs) + le **contexte RAG** récupéré sur
+> l'index FAISS réel. Prompt grounded : le modèle répond uniquement à partir du contexte et
+> cite les articles. Défaut : `k=6`, `max_output_tokens=1000`.
 
 ---
 
 ## 25. Checklist d'éligibilité
 
-> ⏳ **Non implémenté (J3 prévu).**
+> ✅ **Implémenté (J3) — `src/llm_features.py` → `checklist_eligibilite()`.** Génère un tableau
+> « À vérifier / Règle / Référence (article du corpus) » à partir de la fiche AO + contexte RAG
+> (requête orientée « conditions de participation, capacités, garanties »).
 
 Logique métier visée par la stratégie :
 
@@ -984,45 +988,83 @@ Logique métier visée par la stratégie :
 appel d'offres → exigences → réglementation → analyse → checklist
 ```
 
-Règle documentaire importante (à tenir lors de l'implémentation) : **distinguer clairement**
-dans la checklist :
-
-- ce qui provient de l'appel d'offres (champs extraits) ;
-- ce qui provient du corpus légal (articles récupérés par le RAG) ;
-- ce qui est calculé (ex. comparaison de dates, présence d'une pièce) ;
-- ce qui est généré/interprété par le LLM ;
-- ce qui constitue une citation vérifiable (article réellement présent dans le corpus).
-
-L'objectif : l'utilisateur ne doit **jamais confondre** une génération du LLM avec une règle
-juridique officialisée.
+Règle documentaire **appliquée** : la checklist distingue ce qui provient de l'appel d'offres
+(fiche extraite), ce qui provient du corpus légal (RAG), et les citations d'articles. Le modèle
+local (llama3.2:1b) **peut encore citer des références inexactes** (constaté au benchmark J3 :
+`cit=0`) — le prompt exige de ne citer que le contexte fourni, mais la fiabilité n'est pas
+garantie à 100 % avec un modèle 1B.
 
 ---
 
 ## 26. Citations et grounding
 
-> ⏳ **Non implémenté.** Principe : toute affirmation réglementaire doit pointer vers
-> l'article effectivement présent dans le contexte récupéré (pas une citation « inventée »
-> par le LLM). Vérification par test dédié prévue (cf. §34 — test de citations **À VALIDER**
-> au J3).
+> ✅ **Implémenté (J3).** Toute génération part d'un contexte RAG réel (index FAISS 647 chunks,
+> corpus ARCOP 2024) fourni dans le prompt avec la consigne « réponds UNIQUEMENT à partir du
+> contexte ». Le benchmark (J2-bis/J3) vérifie automatiquement : piège de grounding,
+> honnêteté (info absente), citations, faits. **Limite connue** : llama3.2:1b invente parfois
+> des références (ex. « Décret 2019-1010 ») — mitigé par les prompts, non éliminé.
 
 ---
 
 ## 27. Chat Q&A
 
-> ⏳ **Non implémenté (J3 prévu).** Interface de chat où l'utilisateur pose une question et
-> reçoit une réponse sourcée. Comportements d'états vides (aucun AO, aucune réponse trouvée,
-> LLM indisponible) à définir lors de l'implémentation.
+> ✅ **Implémenté (J3/J4) — `src/llm_features.py` → `repondre_question()`.** Chat grounded :
+> contexte RAG + fiche AO optionnelle + historique des tours précédents. Géré dans l'interface
+> à la DeepSeek (`app.py`, J4). États vides gérés : aucun AO sélectionné, Ollama non lancé,
+> modèle absent (messages clairs dans l'UI).
 
 ---
 
 ## 28. Interface Streamlit
 
-> ⏳ **Non implémenté (J4 prévu).** Streamlit est retenu pour les vues : liste des AO, fiche
-> détail, chat. Aucun code UI n'existe dans le dépôt à la date du document.
+> ✅ **Implémenté (J4) — `app.py`.** Interface **« à la DeepSeek »** : un seul écran de chat
+> (layout centré), un champ de saisie en bas, suggestions cliquables au démarrage. L'utilisateur
+> pose sa question en langage naturel et reçoit automatiquement :
 >
-> **Amélioration proposée — non implémentée actuellement** : la page Streamlit listerait les AO
-> BTP depuis `consultations.db`, afficherait les champs extraits depuis `extraction.db`, et
-> ouvrirait la Q&A RAG.
+> - un **résumé** si la question contient « résumé » ;
+> - une **checklist d'éligibilité sourcée** si elle contient « checklist » / « éligibilité » ;
+> - sinon une **réponse Q&A grounded** sur le corpus.
+>
+> Barre latérale minimale : choix du **marché concerné** (9 AO réels de `consultations.db`, ou
+> « corpus entier ») + bouton « Nouvelle discussion ». **Moteur : Ollama local uniquement**
+> (`llama3.2:1b`). Index FAISS chargé une seule fois par session (`@st.cache_resource`),
+> consultations en cache (`@st.cache_data`). Durée de génération affichée (1er appel ~2-3 min à
+> froid avec le 1B sur CPU). Lancement : `streamlit run app.py`.
+
+### 28.1 Service web multi-utilisateur (Étape A — 19/08/2026)
+
+> ✅ **Implémenté et validé de bout en bout.** Remplace l'interface mono-poste par un service
+> web accessible aux employés de « Btma Industries » (comptes email + mot de passe). Le moteur
+> reste 100 % local (Ollama `llama3.2:1b`, index FAISS).
+
+**Stack** : API **FastAPI** (`server/`) + frontend **React/Vite/Tailwind** (`web/`), build
+`web/dist` servi par FastAPI (SPA fallback). En développement, Vite tourne sur le port 5173
+avec un proxy : toutes les requêtes `/api` partent vers `127.0.0.1:8000`.
+
+**Fonctionnement** :
+
+- **Inscription / connexion** : `POST /api/auth/register` (email + nom + mot de passe),
+  `POST /api/auth/login` → **JWT** (HS256, expiration 24 h) à renvoyer dans l'en-tête
+  `Authorization: Bearer <token>`. Mots de passe hachés en **PBKDF2-SHA256** (stdlib,
+  200 000 itérations, sel 16 octets) — aucun secret en clair.
+- **Conversations** : `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}`
+  (renommage + suppression respectent la propriété : un employé ne touche pas la conversation
+  d'un autre), `GET /api/conversations/{id}/messages`. Titre auto = 1er message (tronqué).
+- **Chat en streaming (SSE)** : `POST /api/conversations/{id}/messages` ouvre un flux
+  `text/event-stream` ; chaque événement est envoyé au format `data: {json}\n\n` :
+  `{"type": "fragment", "contenu": "…"}` puis `{"type": "fin", "reponse": "…complet…"}`. Le
+  client affiche les tokens **au fil de l'eau** (indispensable : ≥ 2 min par réponse sur
+  CPU avec llama3.2:1b). Même aiguillage que l'app Streamlit : question avec « résumé » →
+  résumé, « checklist »/« éligibilité » → checklist sourcée, sinon **chat grounded**. Si
+  l'utilisateur demande un résumé/checklist **sans avoir sélectionné de marché**, la réponse
+  est un **message d'introduction immédiat** (aucun appel modèle, ~0,3 s).
+- **Garde-fou** : la réponse complète passe par `verifier_references()` ; toute référence
+  (décret/loi/arrêté/directive n°…, article N) **introuvable dans le registre du corpus** est
+  signalée dans un événement `{"type": "avertissement", …}` affiché sous la réponse.
+- **Base** : `data/processed/app.db` (tables `users`, `conversations`, `messages`), isolée des
+  bases d'ingestion → remplaçable par Postgres au scale-out.
+
+**Démarrage** : voir §33.6.
 
 ---
 
@@ -1046,13 +1088,35 @@ AO-BTP Copilot/
 │   ├── scraper_arcop.py         ← articles arcop.tg/appels-doffres/
 │   ├── scraper_dossiers_types.py← 22 dossiers-types arcop.tg
 │   ├── download_documents.py    ← téléchargement .docx/.pdf vers data/raw/
-│   └── extraction.py            ← texte HTML→…, champs structurés, SQLite
+│   ├── extraction.py            ← texte HTML→…, champs structurés, SQLite
+│   ├── chunking.py              ← découpage par article + normalisation ligatures
+│   ├── embeddings.py            ← embeddings locaux/ollama/mock (contrat pluggable)
+│   ├── index_rag.py             ← index FAISS local (build/query, meta.json)
+│   ├── llm_features.py          ← intention(), prompts grounded, verifier_references()
+│   └── llm_benchmark.py         ← benchmark LLM + scoring (notebook)
+├── server/                      ← ⭐ API web (Étape A, FastAPI)
+│   ├── main.py                  ← routes REST + SSE + service de web/dist (SPA fallback)
+│   ├── rag.py                   ← aiguillage + prompts + génération Ollama streamée
+│   ├── db.py                    ← SQLite app.db (users/conversations/messages)
+│   ├── auth.py                  ← PBKDF2 + JWT (dépendance utilisateur_courant)
+│   ├── schemas.py               ← modèles Pydantic v2 (EmailStr)
+│   └── config.py                ← chemins, JWT, Ollama, historique (6 tours)
+├── web/                         ← ⭐ frontend React/Vite/Tailwind (Étape A)
+│   ├── package.json / vite.config.js / index.html
+│   └── src/
+│       ├── main.jsx / App.jsx / api.js / index.css
+│       └── components/
+│           ├── AuthPage.jsx     ← connexion / inscription
+│           └── Chat.jsx         ← sidebar conversations + streaming SSE + Markdown
+├── app.py                       ← interface Streamlit (repli local, J4)
 ├── tests/
 │   ├── test_scraper.py          ← 7 tests
 │   ├── test_scraper_arcop.py    ← 3 tests
 │   ├── test_dossiers_types.py   ← 5 tests
 │   ├── test_extraction.py       ← 7 tests
-│   └── test_download.py         ← 5 tests
+│   ├── test_download.py         ← 5 tests
+│   ├── test_llm_features.py     ← 59 tests (features LLM, benchmark, verifier_references)
+│   └── test_server.py           ← 11 tests (auth, db, aiguillage prompts)
 └── data/
     ├── fixtures/
     │   ├── consultations_list.html    ← fixture marche-publics (4 lignes)
@@ -1249,10 +1313,37 @@ python src/extraction.py --doc data/raw/corpus_legal/RECUEIL-...-ARCOP-PDF-2.pdf
        --db data/processed/extraction.db
 ```
 
-### 33.6 Lancement de l'application (interface)
+### 33.6 Lancement de l'application web multi-utilisateur (Étape A)
 
-**Non disponible** — l'interface Streamlit n'est pas encore implémentée (J4). Rien à lancer
-pour l'instant.
+Le **service web** (FastAPI + frontend React servi par l'API) se lance depuis la racine, venv
+activé :
+
+```bash
+python -m uvicorn server.main:app --host 127.0.0.1 --port 8000
+```
+
+Puis ouvrir **http://localhost:8000** : le build frontender (`web/dist`) est servi
+directement (créer un compte → poser une question ; le streaming affiche les tokens au fil de
+l'eau). Prérequis : le build doit exister — le régénérer après une modification du frontend :
+
+```bash
+cd web
+npm install        # une seule fois (dépendances)
+npm run build      # génère web/dist
+cd ..
+```
+
+> **Développement frontend** (Hot Reload sur le port 5173, API proxifiée vers 8000) :
+> ```bash
+> cd web ; npm run dev
+> ```
+> L'API doit tourner à part (`uvicorn server.main:app`). Les requêtes `/api/*` du Vite dev
+> sont renvoyées vers `127.0.0.1:8000` par le proxy de `vite.config.js`.
+
+**Interface de repli** (mono-poste, hors service web) : `streamlit run app.py` (voir §28).
+
+> ⚠️ **1er message ~2-4 min** : llama3.2:1b charge ses poids à froid sur CPU, puis le flux
+> arrive ; les messages suivants sont plus rapides si le modèle reste en mémoire.
 
 ---
 
@@ -1274,15 +1365,20 @@ python tests/test_extraction.py
 python tests/test_download.py
 ```
 
-### 34.2 Inventaire des tests (résultat réel : **26 tests, tous verts**)
+### 34.2 Inventaire des tests (résultat réel : **86 tests, tous verts**)
 
 | Fichier | Ce qu'il valide | Nombre |
 |---|---|---|
 | `tests/test_scraper.py` | Parsing table (4 lignes de la fixture), champs, filtre Travaux, classification BTP (« site »/« mots-clés »), extraction des titres complets via cards | 7 |
 | `tests/test_scraper_arcop.py` | Parsing du flux d'articles, date en lettres, lien PDF direct, constat 0 BTP sur l'échantillon réel | 3 |
 | `tests/test_dossiers_types.py` | 6 dossiers de la fixture, catégories, numéro/libellé, `strip()` des href, absence de numéro | 5 |
-| `tests/test_extraction.py` | Champs sur texte de synthèse, placeholders valides, `is_placeholder`, extrait docx réel (généré en mémoire), format inconnu → ValueError, round-trip SQLite | 7 |
+| `tests/test_extraction.py` | Champs sur texte de synthèse, placeholders valides, `is_placeholder`, extrait docx réel (généré en mémoire), format inconnu → ValueError, round-trip SQLite | 6 |
 | `tests/test_download.py` | Nom de fichier local depuis URL : query-string, extension absente, caractères Windows, espaces | 5 |
+| `tests/test_chunking.py` | Découpage par article, attributions aux 14 documents, normalisation ligatures | 8 |
+| `tests/test_index_rag.py` | Build/query de l'index FAISS (mock embeddings), métadonnées, persistance | 11 |
+| `tests/test_llm_benchmark_scoring.py` | Scoring automatique (piège, honnêteté, citations, faits), pondération, juge factice | 10 |
+| `tests/test_llm_features.py` | `intention()` (résumé/checklist/chat), prompts grounded, `verifier_references()`, intégration corpus réel en mock | 20 |
+| `tests/test_server.py` | **Étape A** : hash/verify PBKDF2, round-trip JWT, cycle utilisateur/conversation/messages SQLite, propriété du renommage, aiguillage prompts RAG (index simulé), historique borné, génération vide sur introduction | 11 |
 
 ### 34.3 Points d'attention (tests vs. réalité)
 
@@ -1823,6 +1919,9 @@ l'index FAISS, choix du hébergement de l'interface.
 |---|---|
 | 15/08 | Cadrage : architecture 5 couches définie ; sources vérifiées par recherche web ; planning J1→J5 établi |
 | 16/08 (J1) | Ingestion + extraction : scraping réel validé (9 consultations, 3 BTP, titres enrichis), dossiers-types (22), téléchargement (22 .docx + Recueil 39 Mo), extraction (22 documents / 44 champs), 26 tests verts |
+| 17-18/08 (J2-J3) | Corpus RAG : chunking par article (647 articles / 14 textes), embeddings + FAISS locaux ; features LLM résumé/checklist/chat grounded (Ollama `llama3.2:1b` uniquement) ; garde-fou `verifier_references()`, 75 tests verts |
+| 18/08 (J4) | Interface Streamlit « à la DeepSeek » (Ollama local) ; défauts du modèle 1B documentés (résumé/checklist peu fiables) |
+| 19/08 (J5 → Étape A) | **Service web multi-utilisateur** : backend FastAPI (`server/`, auth JWT + SQLite app.db, SSE), frontend React/Vite/Tailwind (`web/`), E2E backend validé sur données réelles (805 fragments en 143 s), E2E frontend (SPA servi), **86 tests verts** |
 
 ### 45.2 Historique Git réel (vérifié)
 
@@ -1848,13 +1947,13 @@ l'index FAISS, choix du hébergement de l'interface.
 
 | Statut | Éléments |
 |---|---|
-| **Fonctionnel** | Ingestion (3 scrapers + fixtures + classification), téléchargement idempotent, extraction texte + champs + placeholders, stockage SQLite (3 bases), 44 tests (chunking + embeddings/FAISS inclus). **Benchmark LLM** : noyau + notebook, jeu 7 questions, `.env.example`. **Chunking corpus RAG** : `src/chunking.py` + `corpus_chunks.json` (647 articles / 14 textes). **Embeddings + FAISS** : `src/embeddings.py` + `src/index_rag.py` (chaîne validée en mock sur le corpus réel) |
-| **En cours** | Suite J1 : parsing des pages de détail des AO (`url_detail`) et extraction PDF des AO en cours. Benchmark LLM : **résultats réels en attente de clés API utilisateur**. J2 : **vrai modèle d'embedding** (sentence-transformers) en attente de bande-passante pour torch + génération du répertoire d'index `data/processed/faiss/` |
-| **À tester** | le **rang sémantique réel des recherche** avec `--backend local` (le rang en mock n'est pas sémantique) ; les étapes retrieval/génération/UI à partir de J2/J3 ; benchmark LLM en **mode réel** (clés) |
-| **Bloqué** | Chunking + index FAISS (mock) OK — **embedding local réel** en attente : torch/sentence-transformers se téléchargent trop lentement pendant `ollama pull` (~15 kB/s constaté) ; Ollama `qwen3.6:27b` en cours (> 2 h) |
-| **À faire** | J2 : corpus RAG — **installer sentence-transformers, builder `--backend local`** (chunking + FAISS déjà faits) ; J3 : features LLM ; J4 : interface + rigueur ; J5 : marge |
-| **Risques** | voir §43 |
-| **Décisions ouvertes** | Modèle d'embedding (J2) ; **choix du fournisseur LLM via benchmark (§22.1)** ; hébergement de l'interface ; choix du plan B corpus si l'URL du Recueil change |
+| **Fonctionnel** | Ingestion (scrapers + fixtures + classification), téléchargement idempotent, extraction texte + champs + placeholders, stockage SQLite. **Corpus RAG** : chunking par article (647 / 14 textes), embeddings + FAISS réel (`faiss/` avec `meta.json`). **Features LLM** (Ollama local `llama3.2:1b` uniquement) : résumé, checklist sourcée, chat Q&A grounded, garde-fou `verifier_references()`. **Interface Streamlit** `app.py` (repli). **Service web multi-utilisateur (Étape A)** : API FastAPI (`server/`) + frontend React/Vite/Tailwind (`web/`) ; auth (PBKDF2 + JWT), conversations persistées, **chat en streaming SSE**, SPA servie par l'API ; **E2E validé** (register/login/me, introduction ~0,3 s sans modèle, chat réel 805 fragments en 143 s) ; **86 tests verts** |
+| **En cours** | Aucun blocage majeur. En attente : tests utilisateur réels du service web (créer un compte, chat), commit Étape A, décision modèle local plus fort (qwen2.5:7b / gemma3:4b) pour fiabiliser résumé/checklist |
+| **À tester** | le **chat de bout en bout par un vrai compte** (démarrage froid ~2-4 min, puis streaming) ; l'affichage des avertissements `verifier_references` dans l'UI web |
+| **Bloqué** | Rien ne bloque l'usage. Limite connue : llama3.2:1b invente parfois des références (d'où le garde-fou) et fait des résumés/checklists médiocres |
+| **À faire** | (Étape A) commit ; durcir l'auth (rate limiting, min longueur mdp) ; (Étape B) sources ouest-africaines : Bénin, Côte d'Ivoire, Sénégal SYGMAP, BOAD (Lomé), bailleurs AfDB/UNGM/BM — schéma commun OCDS-like + index RAG par pays |
+| **Risques** | voir §43 (modèle 1B, latences CPU, sources faibles en volume) |
+| **Décisions ouvertes** | modèle local de résumé/checklist (1B insuffisant) ; hébergement ; rythme de rafraîchissement des sources |
 
 ---
 
@@ -1862,13 +1961,13 @@ l'index FAISS, choix du hébergement de l'interface.
 
 Planning documenté (`PROGRESS.md`) et **évolution constatée** :
 
-| Jour | Prévu | État réel au 18/08/2026 |
+| Jour | Prévu | État réel au 19/08/2026 |
 |---|---|---|
 | J1 (16/08) | Ingestion + extraction | **Réalisé** (avec un bonus : pivot dossiers-types, en plus des AO) |
-| J2 (17/08) | Corpus RAG : chunking par article, embeddings, FAISS local | **Chunking réalisé (18/08, 647 articles / 14 textes)** ; embeddings + FAISS **codés et testés en mock** (vrai modèle en attente de bande-passante) |
-| J3 (18/08) | Fonctionnalités LLM : résumé, checklist éligibilité, Q&A | À venir (assise RAG à finaliser en J2) |
-| J4 (19/08) | Interface Streamlit + rigueur (test de bout en bout) | À venir |
-| J5 (20/08) | Marge | À venir |
+| J2 (17/08) | Corpus RAG : chunking par article, embeddings, FAISS local | **Réalisé** : 647 articles / 14 textes, embeddings multilingues locaux, index FAISS réel validé (384 dims) |
+| J3 (18/08) | Fonctionnalités LLM : résumé, checklist éligibilité, Q&A | **Réalisé** (Ollama `llama3.2:1b` uniquement) + garde-fou `verifier_references()` |
+| J4 (19/08) | Interface + rigueur (test de bout en bout) | **Réalisé** : interface Streamlit (repli) puis **service web multi-utilisateur (Étape A)** — FastAPI + React/Vite/Tailwind, SSE, auth, E2E validé, 86 tests verts |
+| J5 (20/08) | Marge | **Étape B** : sources ouest-africaines (Bénin, Côte d'Ivoire, Sénégal SYGMAP, BOAD, bailleurs AfDB/UNGM/BM), schéma commun + index RAG par pays |
 
 Écart notable à documenter : J1 a **dépassé** son périmètre prévu (ajout dossiers-types) et
 a **réduit** l'incertitude initiale (scraping réel validé au lieu de « à valider sur poste »).
@@ -1885,10 +1984,17 @@ Les sélecteurs — initialement marqués « à ajuster sur le poste avec résea
 1. Corriger `import re` dans `src/scraper.py` (bug fallback cards) + test dédié.
 2. Aligner les docstrings/CLI (`--type-marche` vs `--btp-only`).
 3. Persister le texte du corpus dans une table dédiée (les 829 876 caractères) pour le RAG.
-4. Normaliser dates / montants en types canoniques (J2-J3).
+4. Normaliser dates / montants en types canoniques.
 5. Extraction des pages de détail des AO et de leurs PDF.
 6. Surveillance programmée (cron/planificateur) pour rafraîchir les bases.
-7. Interface Streamlit + chat Q&A (J4).
+7. ~~Interface Streamlit + chat Q&A~~ ✅ **réalisé** (repli mono-poste) ; le produit vit désormais
+   dans le service web (Étape A).
+8. **Étape B** : connecteurs ouest-africains (Bénin, Côte d'Ivoire, Sénégal SYGMAP, BOAD Lomé,
+   bailleurs AfDB/UNGM/BM) + schéma commun OCDS-like + index RAG par pays.
+9. **Durcissement du service web** : rate limiting, politique de mot de passe (longueur), tokens
+   de rafraîchissement, upload de fichiers AO, pagination des conversations.
+10. Modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si disque/dispo CPU.
+11. Automatiser en `tests/` le E2E du service web (actuellement scripts `Temp/opencode/`).
 
 ---
 
