@@ -1,0 +1,52 @@
+# ── Hugging Face Space : AO-BTP Copilot (Docker, CPU gratuit) ────────────────
+# Étape 1 : build du frontend (Node)
+# Étape 2 : runtime Python + Ollama dans le MÊME conteneur, modèle embarqué.
+# Deploy : voir deploy/hf/README.md  (espace Docker, port 7860, secret JWT_SECRET)
+
+FROM node:20-slim AS web
+
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+FROM python:3.12-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Dépendances Python runtime (FastAPI + Ollama client + embeddings local)
+COPY requirements-server.txt ./
+RUN pip install --no-cache-dir -r requirements-server.txt
+
+# Ollama : binaire + modèle llama3.2:1b EMBARQUÉ dans l'image
+#  → le Space ne re-télécharge jamais le modèle au réveil.
+RUN set -eux; \
+    curl -fsSL https://ollama.com/install.sh | sh; \
+    (ollama serve >/dev/null 2>&1 &) ; \
+    sleep 12; \
+    ollama pull llama3.2:1b; \
+    pkill ollama || true
+
+# Embedding local pré-téléchargé (le 1er chat ne télécharge rien)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
+# Code + données RAG (index FAISS, consultations, corpus) embarqués
+COPY src/             src/
+COPY server/          server/
+COPY app.py           .
+COPY --from=web /app/web/dist  web/dist
+COPY data/processed/  data/processed/
+
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+ENV PORT=7860
+EXPOSE 7860
+CMD ["./entrypoint.sh"]

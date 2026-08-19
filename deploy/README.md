@@ -1,5 +1,10 @@
 # Déploiement en ligne — VPS + Docker Compose
 
+> ⚠️ **Hébergement gratuit retenu (20/08) : Hugging Face Spaces** — voir `deploy/hf/`
+> (pack dédié + `preparer_space.ps1`). Le présent guide **VPS** reste le plan B
+> (et la voie recommandée si la persistance `app.db` devient requise). Oracle Cloud a été
+> abandonné : offre Always Free **non éligible pour l'emplacement de l'utilisateur**.
+
 Le chatbot est conteneurisé en 3 services : **ollama** (modèle `llama3.2:1b`),
 **preload** (télécharge le modèle au premier démarrage, puis s'arrête) et **app**
 (FastAPI + SPA React, port **8000**).

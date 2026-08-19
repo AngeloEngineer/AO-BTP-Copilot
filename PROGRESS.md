@@ -266,9 +266,25 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
   Caddy) — **reste à faire** : provisionner le VPS et lancer `docker compose up -d --build`
 - [x] **Choix utilisateur : hébergement gratuit = Oracle Cloud Always Free** (instance ARM
   Ampere A1, 4 OCPU/24 Go RAM, gratuit pour toujours). Wheels `faiss-cpu` aarch64 vérifiées
-  sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pas ajouté au
-  `deploy/README.md` (compte, instance ARM, port 8000 en Security List, Docker) + procédure
-  de reconstruction de l'index FAISS sur ARM si nécessaire
+sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pas ajouté au
+   `deploy/README.md` (compte, instance ARM, port 8000 en Security List, Docker) + procédure
+   de reconstruction de l'index FAISS sur ARM si nécessaire
+- [x] **Oracle Cloud ABANDONNÉ (décision utilisateur 20/08)** : l'inscription/exécution est
+   **impossible pour l'emplacement de l'utilisateur** (l'offre Always Free ne couvre pas
+   sa région) → nouvelle difficulté documentée (Difficulté 17). Basculé sur **Hugging Face
+   Spaces Docker** (CPU basic gratuit, 2 vCPU/16 Go, sans carte bancaire)
+- [x] **Pack Hugging Face Spaces** (`deploy/hf/`) : `HF-Dockerfile` (build web/node →
+   runtime python:3.12-slim → **Ollama + `llama3.2:1b` EMBARQUÉS dans l'image** au build,
+   embedding pré-téléchargé, données RAG copiées, CMD port 7860), `entrypoint.sh`
+   (ollama serve en fond → attente API → uvicorn `${PORT:-7860}`), `preparer_space.ps1`
+   (assemble `hf-space\` : code src/server/web sans node_modules/dist/__pycache__ +
+   `data/processed/{faiss,consultations.db,corpus_chunks.json}` + Dockerfile/entrypoint/
+   README/.gitignore), `README.md` (création du Space SDK=Docker, push, secret
+   `JWT_SECRET`, limites & dépannage)
+- [x] **Assemblage testé** : `preparer_space.ps1` OK → `hf-space\` complet (3,1 Mo de
+   données RAG) ; script corrigé (imbrication `src\src` → copie du contenu, exclusion
+   `__pycache__`, ASCII pur pour éviter l'apostrophe/encodage en PowerShell 5.1) — **à
+   pousser par l'utilisateur** (finaliser sauf 1)
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir
@@ -318,13 +334,22 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
 ## Prochaine session
 
 Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel, testé de bout en
-bout, **commité et pushé** (origin/main = `e847c9c`). Le pack `deploy/` est prêt. Priorités :
-1. **Hébergement en ligne** : provisionner le VPS (2 vCPU/4 Go), `git clone`, transférer
-   `data/processed/{faiss,consultations.db}` (via scp) dans `deploy/data/`, générer `JWT_SECRET`,
-   `docker compose up -d --build`, vérifier `/api/meta` + un compte + un chat ; HTTPS (Caddy)
-2. **Tests utilisateur en ligne** : créer un compte depuis le VPS, poser une question,
-   vérifier streaming + avertissements
-3. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
+bout, **commité et pushé** (origin/main = `96bc2d5` à suivre). Les packs `deploy/` (VPS) et
+`deploy/hf/` (Hugging Face Spaces) sont prêts ; `hf-space\` est assemblé. Priorités :
+1. **Hébergement en ligne retenu = Hugging Face Spaces** : ① créer un compte + Space
+   (`huggingface.co/new-space`, SDK = **Docker**, nom = `ao-btp-copilot`, CPU basic
+   gratuit) ; ② relancer `deploy/hf/preparer_space.ps1` puis dans `hf-space\` :
+   `git init && git add -A && git commit && git remote add origin
+   https://huggingface.co/spaces/<USER>/ao-btp-copilot && git push` ; ③ ajouter le secret
+   **`JWT_SECRET`** (Settings → Variables and secrets) et relancer le Space ; ④ tester
+   `https://<USER>-ao-btp-copilot.hf.space` (créer un compte + poser une question,
+   vérifier streaming + avertissements)
+2. **Vérifier le 1er build HF** : temps de build (pip + ollama serve + pull ~1.3 Go +
+   embedding dans l'image) et limites d'image HF ; si sommeil/log base éphémère posent
+   problème → **option B** : base Postgres gratuite à l'extérieur (Neon) branchée sur
+   `db.py` (les conversations/comptes sont éphémères par défaut)
+3. **Tests utilisateur en ligne** : compte réel, question réelle, streaming, warnings
+4. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
    bande-passante/disque disponibles
-4. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun
+5. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun
    OCDS-like + index RAG par pays

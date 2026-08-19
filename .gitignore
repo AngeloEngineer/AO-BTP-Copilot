@@ -30,3 +30,6 @@ data/raw/
 # Frontend web (Étape A)
 web/node_modules/
 web/dist/
+
+# Space Hugging Face assemblé (artefact généré par deploy/hf/preparer_space.ps1)
+hf-space/

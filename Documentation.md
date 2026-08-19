@@ -1384,6 +1384,40 @@ si l'index FAISS local (x86) refusait de se charger, le reconstruire sur le serv
 en une commande `docker compose run --rm --no-deps app python src/index_rag.py build
 --backend local` (asynchrone dans le README).
 
+### 33.8 Déploiement en ligne retenu : Hugging Face Spaces (Docker)
+
+> **Décision 20/08** : Oracle Cloud (33.7) est **abandonné** — l'offre Always Free ne
+> couvre pas l'emplacement de l'utilisateur (cf. Difficulté 17). L'hébergement gratuit
+> retenu est **Hugging Face Spaces en SDK Docker** (CPU basic, gratuit, sans carte
+> bancaire). Fichiers : `deploy/hf/`.
+
+- `HF-Dockerfile` : build du frontend (espace `node:20`) puis runtime
+  `python:3.12-slim`. Particularité : **Ollama ET le modèle `llama3.2:1b` sont
+  EMBARQUÉS dans l'image** (`curl ollama.com/install.sh | sh`, puis `ollama pull
+  llama3.2:1b` pendant le BUILD) → le Space ne re-télécharge jamais le modèle au
+  réveil. L'embedding `paraphrase-multilingual-MiniLM-L12-v2` est aussi pré-téléchargé
+  au build. Les données RAG (`data/processed/faiss/`, `consultations.db`,
+  `corpus_chunks.json`) sont copiées dans l'image. Port `7860` (celui de HF), exposé.
+- `entrypoint.sh` : lance `ollama serve` en arrière-plan, attend `/api/tags`
+  (~30 s max), puis `uvicorn server.main:app --port ${PORT:-7860}`.
+- `preparer_space.ps1` : assemble le dossier `hf-space/` à pousser — code
+  (`src/`, `server/`, `web/` sans `node_modules`/`dist`/`__pycache__`), données RAG,
+  `Dockerfile`, `entrypoint.sh`, `README.md`, `.gitignore`. Vérifié : arborescence
+  correcte, ~3,1 Mo de données. Relancer avant chaque push après modification du code.
+- `README.md` : procédure complète (créer le Space SDK=Docker, push `main`, **secret
+  `JWT_SECRET`**, redémarrage, URL `https://<USER>-<SPACE>.hf.space`) + dépannage.
+
+**Limites assumées** (contrepartie du gratuit) :
+- Le conteneur est **éphémère** : comptes et conversations (`app.db`) sont **perdus au
+  redémarrage/sommeil** (le Space s'endort après ~48 h d'inactivité et se réveille sur
+  visite). Option B si persistance voulue : base Postgres gratuite extérieure (Neon),
+  branchée sur `db.py`.
+- Stockage de l'**image** : modèle (~1,3 Go) + torch (+embedding tout compris)
+  → image de plusieurs Go (à confirmer vs la limite d'image HF) ; si le build échoue
+  sur la taille, REVENIR à un déploiement sans modèle embarqué (téléchargement à
+  froid au 1er chat, lent) ou au pack VPS `deploy/`.
+- 1er build : plusieurs minutes (pip + `ollama pull`). Après : démarrage ~10-20 s.
+
 ---
 
 ## 34. Tests
@@ -1719,6 +1753,27 @@ Apparues au 18/08/2026 avec l'implémentation des embeddings :
   finit en `[object Object]`. Toujours **sérialiser/normaliser** les erreurs d'API avant de
   les afficher, et faire une **validation côté client** (feedback immédiat) en plus de la
   validation serveur (autorité de vérité).
+
+### Difficulté 17 — Oracle Cloud Always Free impossible pour l'emplacement de l'utilisateur
+
+- **Problème** (20/08/2026) : après avoir préparé un guide pas à pas complet, l'inscription
+  / la création d'instance **Oracle Cloud Always Free** s'est avérée **inapplicable pour
+  l'emplacement géographique de l'utilisateur** (l'offre gratuit pour toujours n'est
+  disponible que de certaines régions, et celles-ci ne correspondent pas à son pays) →
+  aucune instance ARM `VM.Standard.A1.Flex` gratuite exploitable.
+- **Cause racine** : contrainte d'**éligibilité régionale** de l'offre Always Free Oracle —
+  facteur **géographique**, hors de notre contrôle et non visible avant de s'engager dans
+  le guide.
+- **Alternative suivie** : bascule vers **Hugging Face Spaces** (SDK Docker, CPU basic
+  gratuit, « set-up without a credit card ») — le code d'hébergement existant est réutilisé
+  via un `HF-Dockerfile` dédié (`deploy/hf/`). Netlify est impossible (statique/JS, pas de
+  Python/Ollama) ; Render/Railway/Fly classiques n'offrent plus de gratuit durable ;
+  Koyeb/Google (e2-micro) sont trop faibles en RAM pour Ollama → HF Spaces était le dernier
+  candidat gratuit crédible.
+- **Leçon** : avant de verrouiller une offre « gratuit pour toujours », **vérifier
+  l'éligibilité par région** dès le départ (et tester la création réelle du compte le plus
+  tôt possible) ; garder une alternative à faible dépendance (ici un pack Docker
+  interchangeable VPS ↔ HF Spaces).
 
 ---
 
