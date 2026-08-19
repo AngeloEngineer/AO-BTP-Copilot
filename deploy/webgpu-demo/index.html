@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AO-BTP Copilot — démo RAG en navigateur</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="bandeau">
+      <h1>AO-BTP Copilot</h1>
+      <p class="tag">
+        Assistant RAG sur les marchés publics de la commande publique togolaise
+        (corpus ARCOP 2024 + avis d'appels d'offres). Le modèle et l'index
+        tournent <strong>dans votre navigateur</strong> (llama3.2:1b, WebGPU/WASM) —
+        aucune donnée n'est envoyée à un serveur.
+      </p>
+      <div id="etat" class="etat">Initialisation…</div>
+    </header>
+
+    <section id="messages" class="messages" aria-live="polite"></section>
+    <section id="sources" class="sources" hidden>
+      <h2>Extraits utilisés pour la réponse</h2>
+      <ul id="sources-liste"></ul>
+    </section>
+
+    <form id="formulaire" class="compositeur">
+      <input id="entree" type="text" autocomplete="off"
+             placeholder="Posez une question sur la commande publique…" disabled>
+      <button id="envoyer" type="submit" disabled>Envoyer</button>
+    </form>
+
+    <div id="exemples" class="exemples"></div>
+
+    <footer class="garde-fou">
+      Démo technique : modèle local 1B — vérifiez toujours les sources officielles.
+      Au premier message, le modèle (~1,2&nbsp;Go) est téléchargé puis mis en cache.
+    </footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

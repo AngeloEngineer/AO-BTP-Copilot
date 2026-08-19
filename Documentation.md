@@ -1442,6 +1442,41 @@ en une commande `docker compose run --rm --no-deps app python src/index_rag.py b
 **Limite assumée** : 1er message froid ~30-60 s (voire 2-3 min) ; pas de persistance de
 conversation (démo).
 
+> ⚠️ **Mise à jour (juil. 2026)** : Hugging Face a rendu **les Spaces Docker ET Gradio
+> payants** (même le hardware « cpu-basic » gratuit en calcul) — seule la voie **Static** +
+> ZeroGPU (comptes anciens) reste gratuite. Les packs 33.8 et 33.9 restent valables avec un
+> abonnement Pro, mais la démo portfolio retenue est devenue la **33.10** (navigateur).
+
+### 33.10 Démo portfolio dans le navigateur (Static Space, zéro serveur)
+
+> **Décision 20/08 (utilisateur)** : « quiconque peut tester le RAG, pour mon portfolio »
+> sans rien payer et sans compte éligible → **tout le RAG côté client**, hébergé en
+> **Static Space** (gratuit pour toujours, même compte neuf). Fichiers :
+> `deploy/webgpu-demo/`.
+
+- `app.js` (ESM, transformers.js `@huggingface/transformers@3` depuis CDN) :
+  - **Retrieval** : similarité de cosinus sur l'index FAISS exporté (647×384) —
+    `assets/vectors.b64.txt` (float32 base64) + `assets/meta.json` ;
+  - **Embeddings** : `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (mêmes poids que le
+    pipeline Python, pooling `mean` + `normalize: true` de manière identique) ;
+  - **Génération** : `onnx-community/Llama-3.2-1B-Instruct-q4f16` (~1,2 Go, mis en cache
+    après le 1er téléchargement), device **webgpu** avec repli **wasm**, streaming
+    token à token via `callback_function` ;
+  - **Prompts grounded répliqués à l'identique** de `llm_features.py` (systeme anti-
+    hallucination, format `[document, Article n — titre]\ntexte`, `Question : …`).
+- `index.html` / `styles.css` : chat avec sources (document, article, similarité %).
+- `assets/` : générés par `scripts/export_demo_web.py` (lit `index.faiss` via
+  `reconstruct_n`, exports `meta`, `consultations`, `config`).
+- `README.md` : frontmatter `sdk: static` + procédure d'upload.
+
+**Déploiement** : Space SDK **Static** (ex. `ao-btp-copilot`) → *Files → Upload files*
+(le contenu du dossier) → URL `https://<USER>-<SPACE>.hf.space`. Aucun build, aucun
+secret. **Bon à savoir** : WebGPU = Chrome/Edge récents ; sans WebGPU le repli WASM
+reste fonctionnel (~3-6 fois plus lent).
+
+Il reste à vérifier la **parity** embeddings JS vs Python (ordre du top-k) — objet d'un
+test Node avant déploiement.
+
 ---
 
 ## 34. Tests

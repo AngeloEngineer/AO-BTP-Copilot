@@ -295,6 +295,22 @@ sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pa
 - [x] **Démo VALIDÉE en local** : gradio 5.50 installé ; `import demo_app` OK ; question
    réelle → streaming Ollama, réponse 614 car. (~2 min à froid : embedder + modèle +
    génération ; SS-usé ensuite)
+- [x] **POLITIQUE HF CHANGÉE (juil. 2026) : SDK Docker ET Gradio payants** (même
+   cpu-basic 2 vCPU/16 Go) → plus d'hébergement gratuit côté serveur ; seuls les
+   **Static Spaces restent gratuits pour tous** (+ ZeroGPU limité aux comptes anciens)
+- [x] **DÉCISION UTILISATEUR (20/08) : démo RAG DANS LE NAVIGATEUR (Static WebGPU)** —
+   100 % côté client, zéro serveur, gratuit pour toujours, aucun compte éligible requis.
+   `deploy/webgpu-demo/` : `app.js` (retrieval cosinus sur l'index FAISS exporté +
+   embeddings `Xenova/paraphrase-multilingual-MiniLM-L12-v2` + génération
+   `onnx-community/Llama-3.2-1B-Instruct-q4f16` via transformers.js, WebGPU avec repli
+   WASM, streaming token à token, prompts grounded répliqués de `llm_features.py`),
+   `index.html`, `styles.css`, `README.md` (frontmatter `sdk: static`)
+- [x] **Export testé** : `scripts/export_demo_web.py` (faiss.reconstruct_n → base64
+   float32, meta + consultations + config) → `webgpu-demo/assets/` : 647×384 vecteurs
+   (1,26 Mo encodé), 647 meta, 9 consultations
+- [x] **README global du projet** rédigé (architecture, quickstart, options de déploiement
+   à jour avec la politique HF)
+- [ ] (en cours) vérification parity Node : embeddings JS vs Python + ordre top-k
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir
@@ -344,19 +360,21 @@ sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pa
 ## Prochaine session
 
 Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel, testé de bout en
-bout, **commité et pushé**. Les packs `deploy/` (VPS), `deploy/hf/` (service complet) et
-**`deploy/hf-demo/` (démo portfolio sans compte, validée en local)** sont prêts. Priorités :
-1. **DÉPLOIEMENT PORTFOLIO (action utilisateur, ~10 min, web uniquement)** :
-   ① créer un compte + Space sur huggingface.co/new-space (SDK = **Docker**, nom =
-   `ao-btp-copilot-demo`, CPU basic gratuit) ; ② relancer
-   `powershell -ExecutionPolicy Bypass -File deploy\hf-demo\preparer_demo.ps1` ;
-   ③ onglet **Files → Upload files** : glisser le **contenu** de `hf-demo-space\`
-   (3,1 Mo, le modèle est téléchargé pendant le build par HF) ; ④ attendre le build
-   (~15-20 min, Logs) ; ⑤ tester `https://<USER>-ao-btp-copilot-demo.hf.space`
-   (question libre, streaming) — **aucun secret requis**
-2. Mettre le lien sur le portfolio (avec une capture du chat RAG)
-3. (option, plus tard) redéployer le service complet multi-utilisateurs `deploy/hf/`
-   (secret `JWT_SECRET` requis) et/ou le pack VPS `deploy/`
+bout, **commité et pushé**. Packs `deploy/` (VPS), `deploy/hf/` (service complet) et
+`deploy/hf-demo/` (Gradio) prêts mais **payants en hébergement HF depuis juil. 2026** →
+la voie retenue est la **démo statique WebGPU** (`deploy/webgpu-demo/`). Priorités :
+1. **Parity Node (moi)** : installer `@huggingface/transformers` + `onnxruntime-node`
+   dans un dossier temporaire, comparer l'embedding JS (pooling mean + L2) à
+   sentence-transformers Python sur 2-3 questions et vérifier que `top-k` JS == top-k
+   FAISS (même ensemble) — puis ajuster `app.js` si écart
+2. **DÉPLOIEMENT PORTFOLIO (utilisateur, ~5 min, web uniquement)** :
+   ① `huggingface.co/new-space` → SDK **Static**, nom `ao-btp-copilot`, visibilité
+   Publique (aucun abonnement) ; ② onglet **Files → Upload files** : glisser tout le
+   **contenu** de `deploy\webgpu-demo\` ; ③ tester
+   `https://<USER>-ao-btp-copilot.hf.space` (Chrome/Edge, 1re question ~1,2 Go à
+   télécharger puis cache) ; ④ mettre le lien sur le portfolio
+3. (option) si truc sur le portefolio rend mal sur mobile sans WebGPU → repli WASM
+   natif (lent) ou démo Gradio si acceptation d'un abonnement Pro
 4. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
    bande-passante/disque disponibles
 5. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun

@@ -1,0 +1,6 @@
+{
+ "dim": 384,
+ "nb_chunks": 647,
+ "modele_embedder": "paraphrase-multilingual-MiniLM-L12-v2",
+ "index_type": "FlatIP_normalized"
+}
