@@ -259,6 +259,11 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
   propriété du renommage, aiguillage prompts via index simulé, historique borné) → **86 verts**
 - [x] `requirements.txt` : + fastapi, uvicorn, pyjwt, email-validator ; `pytest.ini` :
   `pythonpath = src server`
+- [x] **Pack déploiement en ligne** (`deploy/`) : Dockerfile multi-étapes (build web/dist +
+  runtime python:3.12-slim + sentence-transformers/faiss), docker-compose.yml (ollama +
+  preload llama3.2:1b + app, volume ./data:/app/data, JWT via env_file), .env.example,
+  .dockerignore, README d'exploitation (VPS 2 vCPU/4 Go, transfert des données RAG, HTTPS
+  Caddy) — **reste à faire** : provisionner le VPS et lancer `docker compose up -d --build`
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir
@@ -307,12 +312,13 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
 
 ## Prochaine session
 
-Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel et testé de bout en
-bout. Priorités :
-1. **Tests utilisateur du service web** : `uvicorn server.main:app` sur 8000 → ouvrir
-   http://localhost:8000 (ou Vite 5173 en dev), créer un compte, poser une question, vérifier
-   le streaming et les avertissements (1er appel ~2-4 min à froid avec llama3.2:1b)
-2. Committer l'Étape A (rien n'est encore commité : server/, web/, app.py, tests)
+Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel, testé de bout en
+bout, **commité et pushé** (origin/main = `e847c9c`). Le pack `deploy/` est prêt. Priorités :
+1. **Hébergement en ligne** : provisionner le VPS (2 vCPU/4 Go), `git clone`, transférer
+   `data/processed/{faiss,consultations.db}` (via scp) dans `deploy/data/`, générer `JWT_SECRET`,
+   `docker compose up -d --build`, vérifier `/api/meta` + un compte + un chat ; HTTPS (Caddy)
+2. **Tests utilisateur en ligne** : créer un compte depuis le VPS, poser une question,
+   vérifier streaming + avertissements
 3. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
    bande-passante/disque disponibles
 4. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun

@@ -1345,6 +1345,35 @@ cd ..
 > ⚠️ **1er message ~2-4 min** : llama3.2:1b charge ses poids à froid sur CPU, puis le flux
 > arrive ; les messages suivants sont plus rapides si le modèle reste en mémoire.
 
+### 33.7 Déploiement en ligne (VPS + Docker Compose)
+
+> ✅ **Fichiers prêts dans `deploy/`** (à exécuter sur un VPS Linux — Docker et `git`.
+> Requis : 2 vCPU / 4 Go RAM / ≥ 10 Go disque).
+
+Le pack `deploy/` contient :
+- `Dockerfile` (multi-étapes : build de `web/dist` par Node, puis runtime Python
+  `python:3.12-slim` avec `requirements-server.txt` — FastAPI + **faiss-cpu** +
+  **sentence-transformers**, nécessaires aux embeddings des questions).
+- `docker-compose.yml` : 3 services — `ollama` (modèle `llama3.2:1b`), `preload`
+  (une-shot : `ollama pull llama3.2:1b`, s'arrête seul) et `app` (port **8000**,
+  `OLLAMA_HOST=http://ollama:11434`, secret `JWT_SECRET` via `env_file .env`,
+  volume `./data:/app/data`).
+- `.env.example` (gabarit de `JWT_SECRET` ; `JWT_EXP_MINUTES` défaut 12 h) et
+  `.dockerignore` (exclut `data/`, `.venv`, `node_modules`, `web/dist` du contexte).
+- `README.md` : guide opérationnel complet (clone, transfert des données RAG,
+  secrets, démarrage, mise à jour, HTTPS via Caddy, dépannage).
+
+**Particularités assumées** :
+- Les données du RAG (`data/processed/faiss/`, `consultations.db`) ne sont **pas
+  dans Git** : elles sont transférées sur le serveur (`scp`) dans `deploy/data/`,
+  monté en `./data:/app/data`. `app.db` (comptes, conversations) y est créé à la
+  première exécution et **persiste**.
+- L'image runtime ne pré-installe pas les poids : `llama3.2:1b` est tiré par le
+  service `preload` ; le modèle d'embedding est téléchargé au **premier chat**
+  (~470 Mo + torch ~2 Go dans l'image).
+- Le 1er démarrage complet prend ~5-15 min (images + modèle), puis `docker compose
+  up -d` ressert le service en quelques secondes.
+
 ---
 
 ## 34. Tests
@@ -1985,7 +2014,7 @@ l'index FAISS, choix du hébergement de l'interface.
 | **En cours** | Aucun blocage majeur. En attente : tests utilisateur réels du service web (créer un compte, chat), commit Étape A, décision modèle local plus fort (qwen2.5:7b / gemma3:4b) pour fiabiliser résumé/checklist |
 | **À tester** | le **chat de bout en bout par un vrai compte** (démarrage froid ~2-4 min, puis streaming) ; l'affichage des avertissements `verifier_references` dans l'UI web |
 | **Bloqué** | Rien ne bloque l'usage. Limite connue : llama3.2:1b invente parfois des références (d'où le garde-fou) et fait des résumés/checklists médiocres |
-| **À faire** | (Étape A) commit ; durcir l'auth (rate limiting, min longueur mdp) ; (Étape B) sources ouest-africaines : Bénin, Côte d'Ivoire, Sénégal SYGMAP, BOAD (Lomé), bailleurs AfDB/UNGM/BM — schéma commun OCDS-like + index RAG par pays |
+| **À faire** | (Étape A) commit → **fait** ; **déploiement en ligne** : pack `deploy/` (Docker Compose : ollama + preload + app) prêt à pousser sur un VPS — restent à faire : provisionner le VPS, transférer les données RAG, lancer `docker compose up -d`, DNS/HTTPS ; (Étape B) sources ouest-africaines : Bénin, Côte d'Ivoire, Sénégal SYGMAP, BOAD (Lomé), bailleurs AfDB/UNGM/BM — schéma commun OCDS-like + index RAG par pays |
 | **Risques** | voir §43 (modèle 1B, latences CPU, sources faibles en volume) |
 | **Décisions ouvertes** | modèle local de résumé/checklist (1B insuffisant) ; hébergement ; rythme de rafraîchissement des sources |
 
@@ -2029,6 +2058,8 @@ Les sélecteurs — initialement marqués « à ajuster sur le poste avec résea
    de rafraîchissement, upload de fichiers AO, pagination des conversations.
 10. Modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si disque/dispo CPU.
 11. Automatiser en `tests/` le E2E du service web (actuellement scripts `Temp/opencode/`).
+12. **Déploiement en cours** : provisionner le VPS, transférer les données RAG, `docker compose
+    up -d`, DNS + HTTPS (Caddy). Pack `deploy/` prêt.
 
 ---
 

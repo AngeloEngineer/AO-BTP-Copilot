@@ -1,0 +1,14 @@
+# Docker — exclusions du contexte de build
+**/.git
+.venv/
+data/
+web/node_modules/
+web/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+*.log
+.env
+.idea/
+.vscode/

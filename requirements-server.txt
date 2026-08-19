@@ -1,0 +1,14 @@
+# Dépendances du RUNTIME serveur (utilisée par deploy/Dockerfile)
+# Le cadre dev complet (scrapers, notebooks, benchmark) garde requirements.txt.
+fastapi>=0.141
+uvicorn[standard]>=0.52
+pyjwt>=2.8
+email-validator>=2.3
+ollama>=0.5
+requests>=2.31
+python-dotenv>=1.2
+
+# Embeddings des questions + index FAISS (chargés au 1er appel, ~2 Go avec torch CPU)
+sentence-transformers>=3.3
+faiss-cpu>=1.8
+numpy>=1.26
