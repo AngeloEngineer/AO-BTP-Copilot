@@ -1,4 +1,40 @@
 const TOKEN_KEY = 'btma_token'
+const CHAMPS = { password: 'Mot de passe', email: 'Email', nom: 'Nom' }
+const MESSAGES = [
+  ['String should have at least 8 characters', 'doit contenir au moins 8 caractères'],
+  ['String should have at least 2 characters', 'doit contenir au moins 2 caractères'],
+  ['String should have at least 1 character', 'ne doit pas être vide'],
+  ['value is not a valid email address', "n'est pas une adresse email valide"],
+  ['Field required', 'est manquant'],
+  ['String should have at most', 'est trop long'],
+]
+
+function messageErreur(data, statut) {
+  if (!data) return `Erreur ${statut}`
+  const detail = data.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((v) => {
+        const champ = (v.loc || []).join('.').replace(/^body\./, '')
+        const libelle = CHAMPS[champ] || champ || 'Formulaire'
+        let msg = v.msg || ''
+        for (const [cle, trad] of MESSAGES) {
+          if (msg.startsWith(cle)) {
+            msg = trad
+            break
+          }
+        }
+        return `${libelle} ${msg}`.trim()
+      })
+      .join(' · ')
+  }
+  try {
+    return JSON.stringify(detail)
+  } catch {
+    return `Erreur ${statut}`
+  }
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -24,7 +60,7 @@ async function jreq(method, path, body, timeout = 20000) {
       signal: ctrl.signal,
     })
     const data = res.status === 204 ? null : await res.json().catch(() => null)
-    if (!res.ok) throw new Error((data && data.detail) || `Erreur ${res.status}`)
+    if (!res.ok) throw new Error(messageErreur(data, res.status))
     return data
   } finally {
     clearTimeout(timer)
@@ -58,7 +94,7 @@ export async function streamMessage(conversationId, content, marche, onEvent, si
   })
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => null)
-    throw new Error((err && err.detail) || `Erreur ${res.status}`)
+    throw new Error(messageErreur(err, res.status))
   }
   const reader = res.body.getReader()
   const decoder = new TextDecoder()

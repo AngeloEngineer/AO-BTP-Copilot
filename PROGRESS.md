@@ -251,6 +251,10 @@ AfDB/UNGM/BM) seront alimentées en Étape B.
   `[user, assistant, user, assistant]`, titre auto sur le premier message
 - [x] **E2E frontend** : build Vite OK (287 modules), SPA 200 à `/`, routes profondes →
   index.html, `/api/meta` intact à côté
+- [x] **Bug réel corrigé (tests utilisateur)** : inscription `422` affichée « [object Object] »
+  → traduction des erreurs de validation Pydantic en français dans `api.js` (`messageErreur`)
+  + validation par champ dans AuthPage (nom ≥ 2, email valide, mot de passe ≥ 8, blocage avant
+  envoi) ; vérifié : corps valide → 201 OK. Doc : Difficulté 16
 - [x] **Tests** : `tests/test_server.py` (auth, cycle utilisateur/conversation/messages,
   propriété du renommage, aiguillage prompts via index simulé, historique borné) → **86 verts**
 - [x] `requirements.txt` : + fastapi, uvicorn, pyjwt, email-validator ; `pytest.ini` :

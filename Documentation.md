@@ -1647,6 +1647,40 @@ Apparues au 18/08/2026 avec l'implémentation des embeddings :
   à la fois** ; prioriser selon le chemin critique (le LLM RAG attend Ollama, les embeddings
   locaux pèsent moins).
 
+### Difficulté 16 — Impossibilité de créer un compte sur le service web (`422` / « [object Object] »)
+
+- **Problème** (19/08/2026, tests utilisateur réels) : en soumettant le formulaire
+  d'inscription (mot de passe saisi), le serveur répond `422 Unprocessable Content` et
+  l'interface affiche **`[object Object]`** comme message d'erreur — inexploitable pour savoir
+  quoi corriger, et l'inscription semble « bloquée ».
+- **Cause racine** (2 bugs cumulés) :
+  1. **Côté serveur** : la validation Pydantic du schéma `RegisterRequest` (email = `EmailStr`,
+     `nom ≥ 2`, `password ≥ 8`) rejette la saisie, mais l'erreur est **silencieuse pour
+     l'utilisateur** : le formulaire web ne faisait aucune validation côté client et l'API
+     renvoyait un 422 avec un tableau JSON d'erreurs.
+  2. **Côté frontend** : `api.js` faisait `throw new Error(data.detail)` ; or pour une erreur
+     422, `detail` est un **tableau d'objets de validation** → `String([])` produit
+     `"[object Object],[object Object]"`. Le message affiché ne disait rien d'utile.
+- **Diagnostic** : test direct de l'endpoint `POST /api/auth/register` via Python
+  (`urllib`) : `{"nom":"x","email":"mauvais","password":"abc"}` → `422` avec
+  `{"detail":[{"type":"string_too_short","loc":["body","nom"],...}, …]}`, alors qu'un corps
+  valide (`nom` ≥ 2 car., email correct, `password` ≥ 8 car.) répond `201 OK`. Le service
+  fonctionnait donc ; c'était la **rétro-signalisation** qui était défaillante.
+- **Solution** :
+  - `web/src/api.js` : nouvelle fonction `messageErreur()` — si `detail` est un tableau, on
+    reconstruit un message lisible par champ (« Mot de passe doit contenir au moins 8
+    caractères », « Email n'est pas une adresse email valide », …) via un dictionnaire de
+    libellés français + correspondance de préfixes (`MESSAGES`) ; tout autre objet est
+    sérialisé proprement.
+  - `web/src/components/AuthPage.jsx` : suivi des erreurs **par champ** (`erreursChamps`) avec
+    messages français sous le champ fautif (nom ≥ 2, email au format
+    `ex. jeanne@btma.ci`, mot de passe ≥ 8) + **blocage avant envoi** si le formulaire est
+    invalide. Rebuild `web/dist` (servi en direct par uvicorn, aucun redémarrage nécessaire).
+- **Leçon** : `new Error(<tableau>)` ne « marche » pas en JS — tout objet passé en message
+  finit en `[object Object]`. Toujours **sérialiser/normaliser** les erreurs d'API avant de
+  les afficher, et faire une **validation côté client** (feedback immédiat) en plus de la
+  validation serveur (autorité de vérité).
+
 ---
 
 ## 38. Décisions techniques

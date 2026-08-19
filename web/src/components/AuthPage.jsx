@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../api.js'
 
-function Champ({ label, type, value, onChange, autoFocus = false }) {
+function Champ({ label, type, value, onChange, autoFocus = false, messageErreur }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-slate-300">{label}</span>
@@ -11,11 +11,18 @@ function Champ({ label, type, value, onChange, autoFocus = false }) {
         onChange={(e) => onChange(e.target.value)}
         autoFocus={autoFocus}
         autoComplete={type === 'password' ? 'current-password' : 'on'}
-        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30"
+        className={`w-full rounded-lg border bg-slate-900 px-3 py-2.5 text-slate-100 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30 ${
+          messageErreur ? 'border-red-500/60' : 'border-slate-700'
+        }`}
       />
+      {messageErreur && (
+        <span className="mt-1 block text-xs text-red-400">{messageErreur}</span>
+      )}
     </label>
   )
 }
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function AuthPage({ onAuthed }) {
   const [mode, setMode] = useState('login')
@@ -23,16 +30,33 @@ export default function AuthPage({ onAuthed }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [erreur, setErreur] = useState('')
+  const [erreursChamps, setErreursChamps] = useState({})
   const [chargement, setChargement] = useState(false)
+
+  function valider() {
+    const erreurs = {}
+    if (mode === 'register' && nom.trim().length < 2) {
+      erreurs.nom = 'Au moins 2 caractères'
+    }
+    if (!EMAIL.test(email.trim())) {
+      erreurs.email = 'Email invalide (ex. jeanne@btma.ci)'
+    }
+    if (password.length < 8) {
+      erreurs.password = 'Au moins 8 caractères'
+    }
+    setErreursChamps(erreurs)
+    return Object.keys(erreurs).length === 0
+  }
 
   async function soumettre(e) {
     e.preventDefault()
     setErreur('')
+    if (!valider()) return
     setChargement(true)
     try {
       const rep = mode === 'login'
-        ? await api.login({ email, password })
-        : await api.register({ nom, email, password })
+        ? await api.login({ email: email.trim(), password })
+        : await api.register({ nom: nom.trim(), email: email.trim(), password })
       onAuthed(rep.token, rep.user)
     } catch (err) {
       setErreur(err.message)
@@ -63,7 +87,7 @@ export default function AuthPage({ onAuthed }) {
               <button
                 key={m}
                 type="button"
-                onClick={() => { setMode(m); setErreur('') }}
+                onClick={() => { setMode(m); setErreur(''); setErreursChamps({}) }}
                 className={`rounded-md py-2 text-sm font-medium transition ${
                   mode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
@@ -75,20 +99,21 @@ export default function AuthPage({ onAuthed }) {
 
           {mode === 'register' && (
             <div className="mb-4">
-              <Champ label="Nom complet" type="text" value={nom} onChange={setNom} autoFocus />
+              <Champ label="Nom complet" type="text" value={nom} onChange={setNom} autoFocus
+                messageErreur={erreursChamps.nom} />
             </div>
           )}
           <div className={mode === 'login' ? '' : 'mb-4'}>
             <Champ label="Email professionnel" type="email" value={email} onChange={setEmail}
-              autoFocus={mode === 'login'} />
+              autoFocus={mode === 'login'} messageErreur={erreursChamps.email} />
           </div>
           <div className="mb-5">
             <Champ
-              label="Mot de passe"
+              label="Mot de passe (8 caractères min.)"
               type="password"
               value={password}
               onChange={setPassword}
-              error={mode === 'register' && password.length > 0 && password.length < 8}
+              messageErreur={erreursChamps.password}
             />
           </div>
 
