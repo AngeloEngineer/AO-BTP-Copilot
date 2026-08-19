@@ -1418,6 +1418,30 @@ en une commande `docker compose run --rm --no-deps app python src/index_rag.py b
   froid au 1er chat, lent) ou au pack VPS `deploy/`.
 - 1er build : plusieurs minutes (pip + `ollama pull`). Après : démarrage ~10-20 s.
 
+### 33.9 Démo portfolio sans compte (Gradio, Hugging Face Spaces)
+
+> **Redirection 20/08 (décision utilisateur)** : « je voulais juste que quiconque puisse
+> tester le RAG, notamment pour mon portfolio » → **`deploy/hf-demo/`** : un Space de
+> démo **sans authentification** qui expose le moteur RAG. Le service complet
+> multi-utilisateurs (33.4–33.8) reste dans le dépôt, déploiement optionnel.
+
+- `demo_app.py` : interface **Gradio** (`gr.ChatInterface`) — question libre + liste
+  déroulante des appels d'offres (facultative, pour débloquer résumé/checklist). Réutilise
+  `server/rag.py` tel quel : `construire_prompt()` (aiguillage + `_contexte_requetes` +
+  prompts grounded) et `generer_ollama_stream()` (Ollama `llama3.2:1b`, streaming).
+  Aucun endpoint REST ni JWT.
+- `Dockerfile` : comme le HF-Dockerfile §33.8 mais **sans étage Node** (pas de frontend
+  React) ; Ollama + modèle + embeddings + données RAG embarqués ; port 7860 via
+  `entrypoint-demo.sh` (`ollama serve` en fond → gradio).
+- `requirements-demo.txt` = `-r requirements-server.txt` + `gradio>=4.44,<6`.
+- `preparer_demo.ps1` → `hf-demo-space\` (code, données RAG, Dockerfile, README, rien
+  d'autre) ; upload possible **par le navigateur** (Files → Upload files), aucun secret.
+- **Validé en local** (gradio 5.50) : import OK, question réelle → réponse en streaming
+  (614 car.), ~2 min à froid (embedder + modèle + génération) puis fluide.
+
+**Limite assumée** : 1er message froid ~30-60 s (voire 2-3 min) ; pas de persistance de
+conversation (démo).
+
 ---
 
 ## 34. Tests

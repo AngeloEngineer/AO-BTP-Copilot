@@ -1,0 +1,2 @@
+-r requirements-server.txt
+gradio>=4.44,<6

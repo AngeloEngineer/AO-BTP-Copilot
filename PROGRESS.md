@@ -285,6 +285,16 @@ sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pa
    données RAG) ; script corrigé (imbrication `src\src` → copie du contenu, exclusion
    `__pycache__`, ASCII pur pour éviter l'apostrophe/encodage en PowerShell 5.1) — **à
    pousser par l'utilisateur** (finaliser sauf 1)
+- [x] **REDIRECTION UTILISATEUR (décision 20/08) : démo portfolio sans compte** — « juste
+   quiconque peut tester le RAG pour le portfolio » → **pack démo `deploy/hf-demo/`** :
+   `demo_app.py` (interface **Gradio**, question libre + liste d'appels d'offres pour
+   résumé/checklist, **sans aucune authentification**, réutilise `server.rag` : retrieval
+   FAISS + streaming Ollama), `Dockerfile` (sans étage Node, Ollama + `llama3.2:1b` +
+   embeddings + données **embarqués**), `entrypoint-demo.sh`, `requirements-demo.txt`
+   (requirements-server + gradio 5.50), `preparer_demo.ps1`, `README.md`
+- [x] **Démo VALIDÉE en local** : gradio 5.50 installé ; `import demo_app` OK ; question
+   réelle → streaming Ollama, réponse 614 car. (~2 min à froid : embedder + modèle +
+   génération ; SS-usé ensuite)
 - [ ] (plus tard, si volume) Postgres, rate limiting, OAuth, upload de fichiers AO
 
 ### 20/08 (J5) — Marge — à venir
@@ -334,21 +344,19 @@ sur PyPI → Docker Compose fonctionne tel quel sur ARM ; guide Oracle pas à pa
 ## Prochaine session
 
 Le cœur de l'**Étape A** (service web multi-utilisateur) est fonctionnel, testé de bout en
-bout, **commité et pushé** (origin/main = `96bc2d5` à suivre). Les packs `deploy/` (VPS) et
-`deploy/hf/` (Hugging Face Spaces) sont prêts ; `hf-space\` est assemblé. Priorités :
-1. **Hébergement en ligne retenu = Hugging Face Spaces** : ① créer un compte + Space
-   (`huggingface.co/new-space`, SDK = **Docker**, nom = `ao-btp-copilot`, CPU basic
-   gratuit) ; ② relancer `deploy/hf/preparer_space.ps1` puis dans `hf-space\` :
-   `git init && git add -A && git commit && git remote add origin
-   https://huggingface.co/spaces/<USER>/ao-btp-copilot && git push` ; ③ ajouter le secret
-   **`JWT_SECRET`** (Settings → Variables and secrets) et relancer le Space ; ④ tester
-   `https://<USER>-ao-btp-copilot.hf.space` (créer un compte + poser une question,
-   vérifier streaming + avertissements)
-2. **Vérifier le 1er build HF** : temps de build (pip + ollama serve + pull ~1.3 Go +
-   embedding dans l'image) et limites d'image HF ; si sommeil/log base éphémère posent
-   problème → **option B** : base Postgres gratuite à l'extérieur (Neon) branchée sur
-   `db.py` (les conversations/comptes sont éphémères par défaut)
-3. **Tests utilisateur en ligne** : compte réel, question réelle, streaming, warnings
+bout, **commité et pushé**. Les packs `deploy/` (VPS), `deploy/hf/` (service complet) et
+**`deploy/hf-demo/` (démo portfolio sans compte, validée en local)** sont prêts. Priorités :
+1. **DÉPLOIEMENT PORTFOLIO (action utilisateur, ~10 min, web uniquement)** :
+   ① créer un compte + Space sur huggingface.co/new-space (SDK = **Docker**, nom =
+   `ao-btp-copilot-demo`, CPU basic gratuit) ; ② relancer
+   `powershell -ExecutionPolicy Bypass -File deploy\hf-demo\preparer_demo.ps1` ;
+   ③ onglet **Files → Upload files** : glisser le **contenu** de `hf-demo-space\`
+   (3,1 Mo, le modèle est téléchargé pendant le build par HF) ; ④ attendre le build
+   (~15-20 min, Logs) ; ⑤ tester `https://<USER>-ao-btp-copilot-demo.hf.space`
+   (question libre, streaming) — **aucun secret requis**
+2. Mettre le lien sur le portfolio (avec une capture du chat RAG)
+3. (option, plus tard) redéployer le service complet multi-utilisateurs `deploy/hf/`
+   (secret `JWT_SECRET` requis) et/ou le pack VPS `deploy/`
 4. Décision modèle local plus fort pour résumé/checklist (qwen2.5:7b / gemma3:4b) si
    bande-passante/disque disponibles
 5. (Étape B) connecteurs Bénin / Côte d'Ivoire / Sénégal / BOAD / bailleurs + schéma commun

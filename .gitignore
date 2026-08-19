@@ -33,3 +33,5 @@ web/dist/
 
 # Space Hugging Face assemblé (artefact généré par deploy/hf/preparer_space.ps1)
 hf-space/
+# Space démo portfolio assemblé (artefact généré par deploy/hf-demo/preparer_demo.ps1)
+hf-demo-space/
