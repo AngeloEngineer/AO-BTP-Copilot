@@ -8,6 +8,17 @@ modèle de langage local (`llama3.2:1b` via Ollama) pour répondre en
 d'articles et garde-fous anti-hallucination. **100 % local et gratuit**
 (retrieval FAISS + embeddings multilingues + génération, zéro API cloud).
 
+## Démo vidéo
+
+La vidéo ci-dessous montre l'interface du chatbot RAG : connexion, sélection
+d'un appel d'offres, résumé, checklist d'éligibilité et chat grounded
+(streaming, citations d'articles, garde-fous).
+
+<video src="media/demo-chatbot.mp4" controls style="max-width:100%"></video>
+
+La version source en haute résolution (`Démo.mp4`, 152 Mo) n'est pas versionnée
+dans ce dépôt (limite GitHub > 100 Mo) ; demandez-la si besoin.
+
 ## Fonctionnalités
 
 - **Chat RAG en streaming** (SSE) : l'assistant répond en temps réel à partir
