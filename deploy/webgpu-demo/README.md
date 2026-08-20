@@ -5,7 +5,7 @@ colorTo: blue
 sdk: static
 pinned: false
 license: mit
-short_description: RAG marchés publics (llama3.2:1b) dans le navigateur, sans serveur
+short_description: RAG marchés publics Togo — 100 % navigateur
 ---
 
 # AO-BTP Copilot — démo RAG en navigateur
