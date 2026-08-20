@@ -91,21 +91,6 @@ Réindexer le corpus / interroger en CLI :
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-## Déployer (options)
-
-1. **Démo portfolio « dans le navigateur »** (gratuit pour toujours, sans
-   serveur) : `deploy/webgpu-demo/` → nouveau Space Hugging Face en SDK
-   **Static**, upload des fichiers, fait. Voir son `README.md`.
-2. **Démo Gradio sans compte** (serveur, Ollama embarqué) :
-   `deploy/hf-demo/` → Space SDK Docker ; `preparer_demo.ps1` puis upload.
-3. **Service complet multi-utilisateurs** : `deploy/hf/` (Space Docker, secret
-   `JWT_SECRET`) ou `deploy/` (VPS + Docker Compose). Cf. guides dans chaque
-   dossier.
-
-> Note hébergement : depuis juillet 2026, seul le SDK **Static** reste gratuit
-> pour tous ; les Spaces Gradio/Docker (même cpu-basic) exigent un abonnement
-> Pro. D'où la démo WebGPU statique par défaut.
-
 ## Documentation
 
 - `Documentation.md` : architecture, choix techniques (SQLite, chunking par
