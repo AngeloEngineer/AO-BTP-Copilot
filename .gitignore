@@ -25,7 +25,6 @@ data/raw/
 *.log
 .env
 .env.*
-!.env.example
 
 # Frontend web (Étape A)
 web/node_modules/
@@ -37,7 +36,7 @@ hf-space/
 hf-demo-space/
 
 # Vido source de dmo (152 Mo) - version web allgge dans media/
-D�mo.mp4
+D�mo.mp4
 
 # Vido source de dmo (152 Mo) - version web allgge dans media/
 Démo.mp4
