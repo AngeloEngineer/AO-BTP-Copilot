@@ -14,7 +14,10 @@ La vidéo ci-dessous montre l'interface du chatbot RAG : connexion, sélection
 d'un appel d'offres, résumé, checklist d'éligibilité et chat grounded
 (streaming, citations d'articles, garde-fous).
 
-<video src="media/demo-chatbot.mp4" controls style="max-width:100%"></video>
+[![Vidéo de démonstration du chatbot RAG](media/demo-thumb.jpg)](media/demo-chatbot.mp4)
+
+Cliquez sur la vignette pour lire la vidéo (mp4, ~1 Mo, lue dans le lecteur vidéo
+de GitHub).
 
 La version source en haute résolution (`Démo.mp4`, 152 Mo) n'est pas versionnée
 dans ce dépôt (limite GitHub > 100 Mo) ; demandez-la si besoin.
